@@ -1,0 +1,3 @@
+<Bindings>
+    <Binding name="ZENIALCHAT_TOGGLE" header="ZENIALCHAT">if ZenialChat and ZenialChat.UI then ZenialChat.UI.Toggle() end</Binding>
+</Bindings>
