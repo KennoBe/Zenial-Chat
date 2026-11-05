@@ -64,11 +64,16 @@ local function bubble(u,index)
     row.bodyFrame:SetScript('OnHyperlinkClick',function(_,link,text,button)
         if Z.Safe(link,text,button)then Z.Call(SetItemRef,link,text,button or'LeftButton',DEFAULT_CHAT_FRAME)end
     end)
+    row.bodyFrame:EnableMouse(true)
+    row.bodyFrame:SetScript('OnMouseUp',function(self,button)
+        if button=='RightButton'and not self.overLink then u.MessageMenu(self,self.message)end
+    end)
     row.bodyFrame:SetScript('OnHyperlinkEnter',function(self,link)
+        self.overLink=true
         if not Z.Safe(link)or type(link)~='string'or link:match('^trade:')or link:match('^player:')or link:match('^BNplayer:')then return end
         if GameTooltip then GameTooltip:SetOwner(self,'ANCHOR_CURSOR');local ok=pcall(GameTooltip.SetHyperlink,GameTooltip,link);if ok then GameTooltip:Show()end end
     end)
-    row.bodyFrame:SetScript('OnHyperlinkLeave',function()if GameTooltip then GameTooltip:Hide()end end)
+    row.bodyFrame:SetScript('OnHyperlinkLeave',function(self)self.overLink=false;if GameTooltip then GameTooltip:Hide()end end)
     for _,f in ipairs({row,row.bodyFrame})do
         f:EnableMouseWheel(true);f:SetScript('OnMouseWheel',function(_,delta)u.ScrollTo(u.scroll-delta*60)end)
     end
@@ -95,6 +100,8 @@ function R.Render(u,secondPass)
                 row.context:SetText(Z.Plain(msg.text));T.Place(row.context,12,info.dateHeight+5,w-24,22,row)
             else
                 row.context:Hide();row.bodyFrame:Show();row.author:Show();row.time:Show()
+                -- Rows are recycled: a link hovered in the previous message no longer exists here.
+                if row.bodyFrame.message~=msg then row.bodyFrame.message=msg;row.bodyFrame.overLink=false end
                 local own=msg.outgoing==true;local text=msg.deleted and Z.L('Nachricht gelöscht','Message deleted')or msg.text or''
                 T.Font(row.body,Z.store.settings.fontSize,false,msg.deleted and'muted'or'text');row.body:SetText(text)
                 local bodyWidth=math.min(info.bodyMax,math.max(100,math.ceil(row.body:GetUnboundedStringWidth())+2))

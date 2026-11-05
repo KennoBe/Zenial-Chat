@@ -100,10 +100,21 @@ end
 function U.Toggle()
     if U.frame and U.frame:IsShown()then U.frame:Hide()else U.Open()end
 end
-function U.ShowMenu(anchor,items)
+function U.ShowMenu(anchor,items,atCursor)
     if U.menu then U.menu:Hide()end
     local T=Z.Theme;local menu=U.menu or T.Frame(U.frame,'shell','gold');U.menu=menu
-    menu:SetFrameStrata('TOOLTIP');menu:SetSize(250,#items*30+12);menu:ClearAllPoints();menu:SetPoint('TOPRIGHT',anchor,'BOTTOMRIGHT',0,-2)
+    menu:SetFrameStrata('TOOLTIP');menu:SetSize(250,#items*30+12);menu:ClearAllPoints()
+    if atCursor then
+        -- The cursor starts inside the corner, so leaving the menu is what closes it.
+        local x,y=GetCursorPosition();local scale=menu:GetEffectiveScale()
+        menu:SetClampedToScreen(true);menu:SetPoint('TOPLEFT',UIParent,'BOTTOMLEFT',x/scale-6,y/scale+6)
+        local idle=0
+        menu:SetScript('OnUpdate',function(self,elapsed)
+            if self:IsMouseOver()then idle=0 else idle=idle+elapsed;if idle>=.4 then self:Hide()end end
+        end)
+    else
+        menu:SetPoint('TOPRIGHT',anchor,'BOTTOMRIGHT',0,-2);menu:SetScript('OnUpdate',nil)
+    end
     menu.buttons=menu.buttons or{}
     for i,item in ipairs(items)do
         local b=menu.buttons[i]or T.Button(menu,'',nil);menu.buttons[i]=b
@@ -148,6 +159,15 @@ function U.ConversationMenu(anchor,c)
         {text=Z.L('Gespräch schließen','Close conversation'),run=function()Z.store:SetClosed(c.key,true);if selected()==c then Z.store:Select(nil);U.Refresh()end end},
         {text=Z.L('Verlauf löschen …','Clear history …'),run=function()U.Confirm(Z.L('Diesen lokalen Verlauf löschen? Alte Community-Nachrichten können erneut geladen werden.','Clear this local history? Older community messages can be loaded again.'),function()Z.store:Clear(c.key)end)end},
     })
+end
+-- Addons have no clipboard access: copying means the selected text in the copy window plus Ctrl+C.
+function U.MessageMenu(anchor,msg)
+    if not msg or msg.deleted then return end
+    local text=Z.Plain(msg.text);if text==''then return end
+    local items={{text=Z.L('Nachricht kopieren','Copy message'),run=function()U.ShowCopy(text)end}}
+    local name=not msg.senderPending and Z.Plain(msg.outgoing and msg.ownCharacter or msg.sender)or''
+    if name~=''then items[2]={text=Z.L('Name kopieren','Copy name'),run=function()U.ShowCopy(name)end}end
+    U.ShowMenu(anchor,items,true)
 end
 local function conversationRow(index)
     if U.rows[index]then return U.rows[index]end
