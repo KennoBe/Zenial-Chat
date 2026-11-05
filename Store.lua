@@ -5,7 +5,7 @@ Store.__index = Store
 Z.Store = Store
 
 local defaults = {
-    alphaActive = .94, alphaInactive = .75, scale = 1, fontSize = 14,
+    alphaActive = .98, alphaInactive = .94, scale = 1, fontSize = 14,
     sidebar = 'auto', previews = true, locked = false, focusOnOpen = false,
     autoOpen = false, publicChannels = false, enabledChannels = {},
     clubId = nil, streams = {},
@@ -36,6 +36,10 @@ local function ensureTable(parent, key)
 end
 
 local function applyDefaults(settings)
+    -- Raise the previous default pair while preserving individually chosen opacity.
+    if settings.alphaActive == .94 and settings.alphaInactive == .75 then
+        settings.alphaActive, settings.alphaInactive = defaults.alphaActive, defaults.alphaInactive
+    end
     local numericBounds = {
         alphaActive = { 0, 1 }, alphaInactive = { 0, 1 },
         scale = { .75, 1.5 }, fontSize = { 12, 20 },

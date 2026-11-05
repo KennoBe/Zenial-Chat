@@ -7,11 +7,11 @@ T.colors={shell={.07,.078,.09},sidebar={.085,.094,.105},surface={.10,.112,.128},
 T.font='Interface\\AddOns\\ZenialChat\\Media\\NotoSans-Regular.ttf'
 T.bold='Interface\\AddOns\\ZenialChat\\Media\\NotoSans-SemiBold.ttf'
 T.icons={COMMUNITY='Interface\\GossipFrame\\GossipGossipIcon',GUILD='Interface\\Icons\\INV_Shirt_GuildTabard_01',
-    OFFICER='Interface\\Icons\\INV_Misc_Note_01',PARTY='Interface\\Icons\\INV_Misc_GroupLooking',
-    RAID='Interface\\Icons\\INV_Misc_GroupLooking',INSTANCE_CHAT='Interface\\LFGFrame\\UI-LFG-PORTRAIT',
-    WHISPER='Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon',BN_WHISPER='Interface\\FriendsFrame\\Battlenet-Portrait',
+    OFFICER='Interface\\Icons\\INV_Misc_Note_01',PARTY='Interface\\Icons\\INV_Misc_GroupNeedMore',
+    RAID='Interface\\Icons\\INV_Misc_GroupNeedMore',INSTANCE_CHAT='Interface\\Icons\\INV_Misc_GroupNeedMore',
+    WHISPER='Interface\\GossipFrame\\GossipGossipIcon',BN_WHISPER='Interface\\FriendsFrame\\Battlenet-Portrait',
     CHANNEL='Interface\\GossipFrame\\GossipGossipIcon',general='Interface\\GossipFrame\\GossipGossipIcon',
-    horde='Interface\\TargetingFrame\\UI-PVP-Horde',alliance='Interface\\TargetingFrame\\UI-PVP-Alliance',
+    horde='Interface\\Icons\\INV_BannerPVP_01',alliance='Interface\\Icons\\INV_BannerPVP_02',
     appearance='Interface\\Icons\\Trade_Engineering',behavior='Interface\\Icons\\INV_Misc_Gear_01',
     notifications='Interface\\Icons\\INV_Misc_Bell_01',history='Interface\\Icons\\INV_Misc_Book_09'}
 T.backgrounds={}
@@ -29,7 +29,7 @@ function T.Place(frame,x,y,w,h,parent)
     frame:ClearAllPoints();frame:SetPoint('TOPLEFT',parent or frame:GetParent(),'TOPLEFT',x,-y);frame:SetSize(math.max(1,w),math.max(1,h))
 end
 function T.Panel(frame,kind,border)
-    local color=T.colors[kind or'surface'];frame:SetBackdrop({bgFile='Interface\\Tooltips\\UI-Tooltip-Background',
+    local color=T.colors[kind or'surface'];frame:SetBackdrop({bgFile='Interface\\Buttons\\WHITE8X8',
         edgeFile='Interface\\Tooltips\\UI-Tooltip-Border',tile=true,tileSize=16,edgeSize=8,
         insets={left=2,right=2,top=2,bottom=2}})
     frame:SetBackdropColor(color[1],color[2],color[3],1)
@@ -42,7 +42,7 @@ function T.Frame(parent,kind,border)
 end
 function T.Button(parent,label,fn,style)
     local f=CreateFrame('Button',nil,parent,'BackdropTemplate');T.Panel(f,style or'surface','border')
-    f.opacityMultiplier=.3
+    f.opacityMultiplier=.9
     f.label=T.Text(f,label,13,true,'text')
     f.label:SetPoint('TOPLEFT',f,'TOPLEFT',5,-3);f.label:SetPoint('BOTTOMRIGHT',f,'BOTTOMRIGHT',-5,3)
     f.label:SetWordWrap(false);f.label:SetJustifyH('CENTER');f.label:SetJustifyV('MIDDLE')
@@ -73,21 +73,25 @@ function T.Tooltip(owner,title,detail)
     GameTooltip:Show()
 end
 function T.Input(parent)
-    local bg=T.Frame(parent,'field','border');bg.opacityMultiplier=.35;local f=CreateFrame('EditBox',nil,bg)
+    local bg=T.Frame(parent,'field','border');bg.opacityMultiplier=.95;local f=CreateFrame('EditBox',nil,bg)
     f:SetAutoFocus(false);f:SetTextInsets(10,10,6,6);f:SetFont(T.font,14,'');f:SetTextColor(T.Color('text'))
     f:SetAlpha(1);f.background=bg;f:SetPoint('TOPLEFT',bg,'TOPLEFT',2,-2);f:SetPoint('BOTTOMRIGHT',bg,'BOTTOMRIGHT',-2,2)
     return f,bg
 end
 function T.Icon(parent,conversation)
     local f=CreateFrame('Frame',nil,parent,'BackdropTemplate');T.Panel(f,'field','gold')
-    f.opacityMultiplier=.35
-    f.texture=f:CreateTexture(nil,'ARTWORK');f.texture:SetPoint('TOPLEFT',5,-5);f.texture:SetPoint('BOTTOMRIGHT',-5,5)
+    f.opacityMultiplier=.95
+    f.texture=f:CreateTexture(nil,'ARTWORK');f.texture:SetPoint('TOPLEFT',3,-3);f.texture:SetPoint('BOTTOMRIGHT',-3,3)
     T.SetIcon(f,conversation or{})
     return f
 end
 function T.SetIcon(icon,c)
     local coords=c.classFile and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[c.classFile]
     icon.texture:SetTexCoord(0,1,0,1)
+    if c.classFile and icon.texture.SetAtlas then
+        local ok=pcall(icon.texture.SetAtlas,icon.texture,'groupfinder-icon-class-'..c.classFile:lower(),false)
+        if ok then return end
+    end
     if coords then icon.texture:SetTexture('Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES');icon.texture:SetTexCoord(unpack(coords))
     else icon.texture:SetTexture(T.icons[c.slot or'']or T.icons[c.kind]or'Interface\\Icons\\INV_Misc_GroupLooking')end
 end

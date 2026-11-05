@@ -93,28 +93,25 @@ function R.Render(u,secondPass)
                 row.context:Hide();row.bodyFrame:Show();row.author:Show();row.time:Show()
                 local own=msg.outgoing==true;local text=msg.deleted and Z.L('Nachricht gelöscht','Message deleted')or msg.text or''
                 T.Font(row.body,Z.store.settings.fontSize,false,msg.deleted and'muted'or'text');row.body:SetText(text)
-                row.body:SetWidth(info.bodyMax);row.body:SetHeight(10000)
+                local bodyWidth=math.min(info.bodyMax,math.max(100,math.ceil(row.body:GetUnboundedStringWidth())+2))
+                row.body:SetWidth(bodyWidth);row.body:SetHeight(10000)
                 local real=math.max(Z.store.settings.fontSize+3,row.body:GetStringHeight())
                 if math.abs(real-info.bodyHeight)>.5 then
                     u.measured[msg.id]={text=text,height=real};measuredChanged=true
                 end
-                local plainWidth=math.min(info.bodyMax,math.max(100,characters(Z.Plain(text))*Z.store.settings.fontSize*.53))
-                local bodyWidth=math.min(info.bodyMax,plainWidth);local bw=bodyWidth+24
+                local bw=bodyWidth+24
                 local x=own and math.max(4,w-bw-10)or 48;local y=info.dateHeight+20
-                T.Place(row.bodyFrame,x,y,bw,info.bodyHeight+16,row)
+                T.Place(row.bodyFrame,x,y,bw,real+16,row)
                 row.bodyFrame.zenialBackgroundKind=own and'own'or'bubble'
-                row.bodyFrame.opacityMultiplier=own and.55 or.3
+                row.bodyFrame.opacityMultiplier=own and.95 or.9
                 local color=T.colors[row.bodyFrame.zenialBackgroundKind];row.bodyFrame:SetBackdropColor(color[1],color[2],color[3],(u.currentAlpha or.94)*row.bodyFrame.opacityMultiplier)
-                T.Place(row.body,12,7,bodyWidth,info.bodyHeight+2,row.bodyFrame)
-                -- Measure against precisely the width used by the native FontString.
-                local finalHeight=math.max(Z.store.settings.fontSize+3,row.body:GetStringHeight())
-                if math.abs(finalHeight-info.bodyHeight)>.5 then u.measured[msg.id]={text=text,height=finalHeight};measuredChanged=true end
+                T.Place(row.body,12,7,bodyWidth,real+2,row.bodyFrame)
                 local name=own and(Z.L('Du','You')..(msg.ownCharacter and' · '..msg.ownCharacter or''))or(msg.sender or conv.name)
                 row.author:SetText(name);row.author:SetJustifyH(own and'RIGHT'or'LEFT');T.Place(row.author,x,info.dateHeight,bw,18,row)
                 T.NameColor(row.author,msg.senderClass or conv.classFile)
                 if own then row.icon:Hide()else row.icon:Show();T.SetIcon(row.icon,{kind=conv.kind,classFile=msg.senderClass or conv.classFile});T.Place(row.icon,5,y-8,34,34,row)end
                 row.time:SetText(stamp(msg.at,'%H:%M')..(msg.edited and' · '..Z.L('bearbeitet','edited')or''))
-                T.Place(row.time,x,y+info.bodyHeight+18,bw,14,row)
+                T.Place(row.time,x,y+real+18,bw,14,row)
             end
         end
     end

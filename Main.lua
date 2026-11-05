@@ -14,7 +14,7 @@ frame:SetScript('OnEvent',function(_,event,...)
     if event=='ADDON_LOADED'then local name=...;if name=='ZenialChat'then Z.Initialize()end;return end
     if not Z.ready then if event=='PLAYER_LOGIN'then Z.Initialize()else return end end
     local c,row,added=Z.adapter:OnEvent(event,...)
-    if event=='PLAYER_LOGIN'then Z.adapter:RefreshIdentity()end
+    if event=='PLAYER_LOGIN'then Z.adapter:RefreshIdentity();Z.UI.CreateMinimapButton()end
     Z.Notifications.Incoming(c,row,added)
     Z.UI.RequestRefresh(event,c and c.key)
 end)

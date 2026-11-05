@@ -292,10 +292,10 @@ function U.Build()
     U.title=T.Text(U.titleBar,'Zenial Chat',20,true,'goldBright')
     U.titleBar:SetScript('OnDragStart',function()if not Z.store.settings.locked then f:StartMoving()end end)
     U.titleBar:SetScript('OnDragStop',function()f:StopMovingOrSizing();U.SaveGeometry()end)
-    U.gear=T.Button(f,'⚙',function()U.OpenSettings('appearance')end);U.gear.tip=Z.L('Einstellungen','Settings')
+    U.gear=T.Button(U.titleBar,'⚙',function()U.OpenSettings('appearance')end);U.gear.tip=Z.L('Einstellungen','Settings')
     T.ButtonIcon(U.gear,'Interface\\Icons\\Trade_Engineering','GM-icon-settings')
-    U.lock=T.Button(f,'◇',function()U.SetSetting('locked',not Z.store.settings.locked)end);U.lock.tip=Z.L('Position und Größe sperren','Lock position and size')
-    U.close=Z.CloseButton(f,function()f:Hide()end,Z.L('Schließen','Close'))
+    U.lock=T.Button(U.titleBar,'◇',function()U.SetSetting('locked',not Z.store.settings.locked)end);U.lock.tip=Z.L('Position und Größe sperren','Lock position and size')
+    U.close=Z.CloseButton(U.titleBar,function()f:Hide()end,Z.L('Schließen','Close'))
     U.listPanel=T.Frame(f,'sidebar','line')
     U.search,U.searchBackground=T.Input(U.listPanel);U.query=''
     U.searchHint=T.Text(U.searchBackground,Z.L('Gespräche suchen','Search conversations'),12,false,'muted');U.searchHint:SetPoint('LEFT',10,0)
@@ -357,6 +357,29 @@ function U.Build()
     local saved=selected()
     if saved then U.loadingDraft=true;U.input:SetText(saved.draft or'');U.loadingDraft=false;U.loadedKey=saved.key end
     U.Layout()
+end
+function U.CreateMinimapButton()
+    if U.minimapButton or not Minimap then return end
+    local button=CreateFrame('Button','ZenialChatMinimapButton',Minimap);U.minimapButton=button
+    button:SetSize(32,32);button:SetFrameLevel(Minimap:GetFrameLevel()+8)
+    button:RegisterForClicks('LeftButtonUp','RightButtonUp')
+    local icon=button:CreateTexture(nil,'ARTWORK');icon:SetSize(20,20);icon:SetPoint('CENTER')
+    icon:SetTexture(Z.Theme.icons.COMMUNITY)
+    local border=button:CreateTexture(nil,'OVERLAY');border:SetAllPoints()
+    local ok=border.SetAtlas and pcall(border.SetAtlas,border,'UI-HUD-Minimap-Frame-Cycle',false)
+    if not ok then border:SetTexture('Interface\\Minimap\\MiniMap-TrackingBorder');border:SetSize(54,54);border:ClearAllPoints();border:SetPoint('TOPLEFT')end
+    button:SetHighlightTexture('Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight')
+    button:SetScript('OnClick',function(_,mouseButton)
+        if mouseButton=='RightButton'then U.OpenSettings('appearance')else U.Toggle()end
+    end)
+    button:SetScript('OnEnter',function(self)Z.Theme.Tooltip(self,'Zenial Chat',Z.L('Linksklick: Chat öffnen / schließen\nRechtsklick: Einstellungen\nBefehl: /zchat','Left-click: Open / close chat\nRight-click: Settings\nCommand: /zchat'))end)
+    button:SetScript('OnLeave',function()if GameTooltip then GameTooltip:Hide()end end)
+    local function position()
+        local radius=math.min(Minimap:GetWidth(),Minimap:GetHeight())/2+16
+        local angle=math.rad(200)
+        button:ClearAllPoints();button:SetPoint('CENTER',Minimap,'CENTER',math.cos(angle)*radius,math.sin(angle)*radius)
+    end
+    Minimap:HookScript('OnSizeChanged',position);position()
 end
 function U.StartConversation()
     U.ShowCopy('',Z.L('Neue Nachricht · Spielername oder BattleTag','New message · Player name or BattleTag'));U.copy.edit:SetMultiLine(false)
