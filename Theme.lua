@@ -1,9 +1,14 @@
 local _,Z=...
 local T={};Z.Theme=T
-T.colors={shell={.07,.078,.09},sidebar={.085,.094,.105},surface={.10,.112,.128},
-    bubble={.125,.14,.16},own={.12,.205,.295},gold={.78,.60,.28},goldBright={1,.81,.39},
-    border={.32,.28,.20},text={.93,.93,.91},muted={.64,.67,.71},selected={.23,.20,.13},
-    red={.72,.12,.105},field={.035,.044,.056},line={.20,.22,.25}}
+-- Stone and gold, same hues as T.palette in _dev/shared/Theme.lua (this addon keeps its own theme file).
+local function hex(value)
+    local r,g,b=value:match('^(%x%x)(%x%x)(%x%x)$')
+    return{tonumber(r,16)/255,tonumber(g,16)/255,tonumber(b,16)/255}
+end
+T.colors={shell=hex('100e0b'),sidebar=hex('15120e'),surface=hex('1b1812'),
+    bubble=hex('231f17'),own=hex('3a2e12'),gold=hex('ffd100'),goldBright=hex('ffe05c'),
+    border=hex('8f7433'),text=hex('f1ead8'),muted=hex('a79c84'),selected=hex('3d2f0a'),
+    red=hex('c23b2a'),field=hex('0b0a07'),line=hex('3a3222')}
 T.font='Interface\\AddOns\\ZenialChat\\Media\\NotoSans-Regular.ttf'
 T.bold='Interface\\AddOns\\ZenialChat\\Media\\NotoSans-SemiBold.ttf'
 T.icons={COMMUNITY='Interface\\GossipFrame\\GossipGossipIcon',GUILD='Interface\\Icons\\INV_Shirt_GuildTabard_01',
