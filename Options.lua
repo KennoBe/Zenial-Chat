@@ -23,7 +23,7 @@ local function buildSpecs()
     elseif U.settingsPage=='behavior'then
         add('section',Z.L('Eingabe & Fenster','Input & window'))
         add('check',Z.L('Eingabe beim Öffnen fokussieren','Focus composer when opening'),{key='focusOnOpen'})
-        add('check',Z.L('Bei Direktnachrichten automatisch öffnen','Open automatically for direct messages'),{key='autoOpen'})
+        add('check',Z.L('Bei Direktnachrichten automatisch öffnen (nicht im Kampf)','Open automatically for direct messages (not in combat)'),{key='autoOpen'})
         add('note',Z.L('Enter sendet · Shift+Enter fügt einen Zeilenumbruch ein. Escape löst zuerst den Eingabefokus.','Enter sends · Shift+Enter inserts a new line. Escape first releases input focus.'))
         add('note',Z.L('Tastenkürzel: WoW → Tastenbelegung → Zenial Chat. /zchat öffnet das Fenster.','Shortcut: WoW → Key Bindings → Zenial Chat. /zchat opens the window.'))
         add('section',Z.L('Zenial Community','Zenial Community'))

@@ -13,6 +13,9 @@ local function playIncoming()
     if N.lastIncomingSound and now-N.lastIncomingSound<SOUND_INTERVAL then return end
     N.lastIncomingSound=now;N.PlayTell()
 end
+local function inCombat()
+    return Z.Call(UnitAffectingCombat,'player')==true or Z.Call(InCombatLockdown)==true
+end
 function N.Incoming(conv,message,added)
     if not added or not conv or not message or message.outgoing or message.context or message.deleted then return end
     if Z.IsVisibleAtEnd(conv.key)then return end
@@ -23,8 +26,8 @@ function N.Incoming(conv,message,added)
         if pref.toast then N.Toast(conv,message)end
     end
     if Z.store.settings.autoOpen and(conv.kind=='WHISPER'or conv.kind=='BN_WHISPER')then
-        -- Opening is explicitly opt-in; never change an already visible chat or steal focus.
-        if not Z.UI.frame or not Z.UI.frame:IsShown()then
+        -- Opening is explicitly opt-in; never change an already visible chat, steal focus or open in combat.
+        if not inCombat()and(not Z.UI.frame or not Z.UI.frame:IsShown())then
             local focus=Z.store.settings.focusOnOpen;Z.store.settings.focusOnOpen=false
             Z.UI.Open();Z.store.settings.focusOnOpen=focus
         end
