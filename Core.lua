@@ -36,6 +36,51 @@ function Z.Plain(text)
     if not Z.Safe(text)or type(text)~='string'then return''end
     return text:gsub('|c%x%x%x%x%x%x%x%x',''):gsub('|r',''):gsub('|H.-|h(.-)|h','%1'):gsub('|T.-|t',''):gsub('|A.-|a',''):gsub('|K.-|k',''):gsub('||','|')
 end
+-- The native chat link handlers own the player menu and its available actions.
+function Z.PlayerLink(c,msg,label)
+    if not Z.Safe(c,msg,label)or type(c)~='table'or type(label)~='string'then return label end
+    if msg and msg.senderPending then return label end
+    local function name(value)
+        return Z.Safe(value)and type(value)=='string'and value~=''and not value:find('[|:%c]')and value or nil
+    end
+    local function id(value)
+        if not Z.Safe(value)then return nil end
+        if type(value)=='string'and value:match('^%d+$')then return value end
+        if type(value)=='number'and value>=0 and value<math.huge and value%1==0 then return string.format('%.0f',value)end
+    end
+    local kind,parts
+    if c.kind=='COMMUNITY'then
+        if not msg or not Z.Safe(msg.id,msg.authorMemberId)or type(msg.id)~='string'or msg.authorMemberId==nil then return label end
+        local epoch,position=msg.id:match('^club:(%d+):(%d+)$')
+        local club,stream=id(c.clubId),id(c.streamId)
+        if not epoch or not club or not stream then return label end
+        local a=Z.adapter;local api=a and a.api.C_Club
+        local member=a and a:Table(a:Call(api and api.GetMemberInfo,c.clubId,msg.authorMemberId))
+        if not member or not Z.Safe(member.clubType,member.name,member.bnetAccountId)or not name(member.name)then return label end
+        local types=Enum and Enum.ClubType
+        if not types then return label end
+        if member.clubType==types.BattleNet then
+            local account=id(member.bnetAccountId);if not account or account=='0'then return label end
+            kind='BNplayerCommunity';parts={member.name,account,club,stream,epoch,position}
+        elseif member.clubType==types.Character or member.clubType==types.Guild then
+            kind='playerCommunity';parts={member.name,club,stream,epoch,position}
+        end
+    elseif c.kind=='BN_WHISPER'and not(msg and msg.outgoing)then
+        if not name(c.target)then return label end
+        local account=id(Z.adapter and Z.adapter:ResolveAccount(c.target))
+        if not account or account=='0'or not name(c.name)then return label end
+        kind='BNplayer';parts={c.name,account,0}
+    else
+        local target=msg and(msg.outgoing and msg.ownCharacter or msg.sender)or c.target
+        if msg and msg.outgoing and c.kind=='BN_WHISPER'then target=msg.ownCharacter end
+        if not name(target)then return label end
+        kind='player';parts={target}
+    end
+    if not kind then return label end
+    local text=Z.Call(LinkUtil and LinkUtil.FormatLink,kind,label,unpack(parts))
+    if type(text)~='string'then return label end
+    return text,text:match('|H([^|]+)|h')
+end
 function Z.IsVisibleAtEnd(key)
     local u=Z.UI
     return u and u.frame and u.frame:IsShown()and not u.settingsPanel:IsShown()and Z.store.db.ui.selected==key and u.atEnd==true or false

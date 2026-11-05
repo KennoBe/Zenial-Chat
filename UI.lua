@@ -159,7 +159,14 @@ local function conversationRow(index)
     row.badge=T.Frame(row,'red','red');row.count=T.Text(row.badge,'',11,true);row.count:SetPoint('CENTER');row.count:SetJustifyH('CENTER')
     row:RegisterForClicks('LeftButtonUp','RightButtonUp')
     row:SetScript('OnClick',function(self,button)
-        if button=='RightButton'then U.ConversationMenu(self,self.conversation)
+        if button=='RightButton'then
+            local c=self.conversation
+            local text,link
+            if c.kind=='WHISPER'or c.kind=='BN_WHISPER'then text,link=Z.PlayerLink(c,nil,c.name)end
+            if link and type(SetItemRef)=='function'then
+                if U.menu then U.menu:Hide()end
+                Z.Call(SetItemRef,link,text,button,DEFAULT_CHAT_FRAME)
+            else U.ConversationMenu(self,c)end
         else
             local match=U.query~=''and Z.store:Search(self.conversation,U.query)
             U.Select(self.conversation.key,match and match.id)
