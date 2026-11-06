@@ -66,7 +66,7 @@ function U.HistoryArrow(key)
     else position=position+1 end
     local value
     if position>#list then position=nil;value=U.historyDraft or''else value=list[position]end
-    U.historyPos=position
+    U.historyPos=position;U.historyValue=value
     U.loadingDraft=true;U.input:SetText(value);U.loadingDraft=false
     U.input:SetCursorPosition(#value)
     if not position then U.historyDraft=nil end
@@ -489,9 +489,9 @@ function U.Build()
     U.composer=T.Frame(U.chatPanel,'shell','line');U.composer.opacityMultiplier=0
     U.input,U.inputBackground=T.Input(U.composer);U.input:SetMultiLine(true);U.input:SetHyperlinksEnabled(true)
     U.placeholder=T.Text(U.inputBackground,Z.L('Nachricht schreiben …','Write a message …'),13,false,'muted')
-    U.input:SetScript('OnTextChanged',function(self,userInput)
-        -- Editing a recalled message makes it the draft; just walking through the list does not.
-        if U.historyPos and userInput then U.historyPos=nil;U.historyDraft=nil end
+    U.input:SetScript('OnTextChanged',function(self)
+        -- Any change to a recalled message makes it the draft, also an inserted link or quote.
+        if U.historyPos and self:GetText()~=U.historyValue then U.historyPos=nil;U.historyDraft=nil end
         if not U.loadingDraft and not U.historyPos and selected()then Z.store:SetDraft(selected().key,self:GetText())end
         U.placeholder:SetShown(self:GetText()=='')
     end)
