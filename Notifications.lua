@@ -8,10 +8,24 @@ end
 -- At most one sound per second for incoming messages, so a burst does not ping repeatedly.
 -- The options test button calls PlayTell directly and is not limited.
 local SOUND_INTERVAL=1
-local function playIncoming()
+-- Sounds offered in the options, as far as this client defines them. Volume is not selectable:
+-- PlaySound only takes a sound kit and a channel.
+N.SOUNDS={{'TELL_MESSAGE','Flüstern','Whisper'},{'UI_BNET_TOAST','Battle.net','Battle.net'},{'RAID_WARNING','Schlachtzugswarnung','Raid warning'},
+    {'READY_CHECK','Bereitschaftscheck','Ready check'},{'IG_PLAYER_INVITE','Einladung','Invitation'},{'MAP_PING','Kartensignal','Map ping'},
+    {'LFG_ROLE_CHECK','Rollencheck','Role check'},{'ALARM_CLOCK_WARNING_2','Wecker','Alarm clock'}}
+local DEFAULT_KITS={raidWarning='RAID_WARNING'}
+function N.KitName(category,pref)
+    local name=pref and pref.soundKit or DEFAULT_KITS[category]or'TELL_MESSAGE'
+    return type(SOUNDKIT)=='table'and SOUNDKIT[name]and name or'TELL_MESSAGE'
+end
+function N.PlayKit(name)
+    local kit=type(SOUNDKIT)=='table'and SOUNDKIT[name]
+    if kit and PlaySound then Z.Call(PlaySound,kit)end
+end
+local function playIncoming(category,pref)
     local now=GetTime()
     if N.lastIncomingSound and now-N.lastIncomingSound<SOUND_INTERVAL then return end
-    N.lastIncomingSound=now;N.PlayTell()
+    N.lastIncomingSound=now;N.PlayKit(N.KitName(category,pref))
 end
 local function inCombat()
     return Z.Call(UnitAffectingCombat,'player')==true or Z.Call(InCombatLockdown)==true
@@ -19,11 +33,15 @@ end
 function N.Incoming(conv,message,added)
     if not added or not conv or not message or message.outgoing or message.context or message.deleted then return end
     if Z.IsVisibleAtEnd(conv.key)then return end
-    local category=Z.Store.Group(conv.kind);if category=='people'then category='whispers'end
+    local category=Z.Store.Group(conv.kind);if category=='people'then category=conv.kind=='BN_WHISPER'and'bnet'or'whispers'end
+    if message.raidWarning then category='raidWarning'end
     local pref=Z.store.settings.notifications[category]or{}
-    if not conv.muted then
-        if pref.sound then playIncoming()end
-        if pref.toast then N.Toast(conv,message)end
+    -- A conversation set to "always" alerts whatever its chat type does; muting still wins.
+    local always=conv.notify=='always'
+    local quiet=conv.muted or Z.store.settings.suppressInCombat and inCombat()
+    if not quiet then
+        if pref.sound or always then playIncoming(category,pref)end
+        if pref.toast or always then N.Toast(conv,message)end
     end
     if Z.store.settings.autoOpen and(conv.kind=='WHISPER'or conv.kind=='BN_WHISPER')then
         -- Opening is explicitly opt-in; never change an already visible chat, steal focus or open in combat.
@@ -69,6 +87,7 @@ local function finish(f)
     if f.fade and not N.fading then N.fading=true;f.fade:Play()
     elseif not f.fade then f:Hide()end
 end
+function N.Duration()return Z.store and Z.store.settings.toastDuration or 5 end
 function N.Toast(conv,message)
     local T=Z.Theme
     if not N.frame then
@@ -82,16 +101,24 @@ function N.Toast(conv,message)
         f:SetScript('OnDragStop',function(self)self:StopMovingOrSizing();N.dragging=false;N.SavePosition()end)
         f:SetScript('OnMouseUp',function()
             if N.dragged then N.dragged=false;return end
-            local key=f.key;f:Hide();Z.UI.Select(key)
+            local key=f.key;f:Hide();if key then Z.UI.Select(key)end
         end)
         f:SetScript('OnUpdate',function(_,elapsed)
-            if N.dragging then N.left=5;return end -- stay visible while being moved
+            if N.dragging then N.left=N.Duration();return end -- stay visible while being moved
             if N.fading then return end
             N.left=N.left-elapsed;if N.left<=0 then finish(f)end
         end)
         f:SetScript('OnHide',function(self)if self.fade then self.fade:Stop()end;N.fading=false;N.dragging=false;self:SetAlpha(1)end)
         f.close=Z.CloseButton(f,function()f:Hide()end,Z.L('Schließen','Close'));T.Place(f.close,288,6,25,24,f)
     end
-    N.frame.key=conv.key;N.frame.title:SetText(conv.name);N.frame.body:SetText(Z.Plain(message.text):gsub('[\r\n]+',' '))
-    N.left=5;N.fading=false;N.dragged=false;if N.frame.fade then N.frame.fade:Stop()end;N.frame:SetAlpha(1);N.frame:Show()
+    -- A burst from one conversation updates one notice and counts up instead of flickering.
+    local running=N.frame:IsShown()and conv.key and N.frame.key==conv.key
+    N.burst=running and(N.burst or 1)+1 or 1
+    local label=Z.Format.ConversationLabel(conv)
+    N.frame.key=conv.key;N.frame.title:SetText(N.burst>1 and label..' ('..N.burst..')'or label);N.frame.body:SetText(Z.Plain(message.text):gsub('[\r\n]+',' '))
+    N.left=N.Duration();N.fading=false;N.dragged=false;if N.frame.fade then N.frame.fade:Stop()end;N.frame:SetAlpha(1);N.frame:Show()
+end
+-- Shows the notice with sample text, so that position and duration can be judged.
+function N.Preview()
+    N.Toast({name=Z.L('Vorschau','Preview')},{text=Z.L('So sieht ein Hinweis aus. Ziehen verschiebt ihn.','This is what a notice looks like. Drag to move it.')})
 end

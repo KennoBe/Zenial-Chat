@@ -18,7 +18,10 @@ T.icons={COMMUNITY='Interface\\GossipFrame\\GossipGossipIcon',GUILD='Interface\\
     CHANNEL='Interface\\GossipFrame\\GossipGossipIcon',general='Interface\\GossipFrame\\GossipGossipIcon',
     horde='Interface\\Icons\\INV_BannerPVP_01',alliance='Interface\\Icons\\INV_BannerPVP_02',
     appearance='Interface\\Icons\\Trade_Engineering',behavior='Interface\\Icons\\INV_Misc_Gear_01',
-    notifications='Interface\\Icons\\INV_Misc_Bell_01',history='Interface\\Icons\\INV_Misc_Book_09'}
+    notifications='Interface\\Icons\\INV_Misc_Bell_01',history='Interface\\Icons\\INV_Misc_Book_09',
+    messages='Interface\\Icons\\INV_Letter_15'}
+-- Client fonts for the message text. The interface itself keeps Noto Sans.
+T.fontFaces={friz='Fonts\\FRIZQT__.TTF',arial='Fonts\\ARIALN.TTF',morpheus='Fonts\\MORPHEUS.TTF',skurri='Fonts\\SKURRI.TTF'}
 T.backgrounds={}
 function T.Color(key)return unpack(T.colors[key]or T.colors.text)end
 function T.Font(f,size,bold,color)
@@ -26,6 +29,17 @@ function T.Font(f,size,bold,color)
     if not ok then f:SetFont('Fonts\\ARIALN.TTF',size or 14,'')end
     f:SetTextColor(T.Color(color or'text'));f:SetJustifyH('LEFT');f:SetJustifyV('TOP')
     if f.SetShadowOffset then f:SetShadowOffset(0,-1);f:SetShadowColor(0,0,0,.45)end
+end
+-- Message text honours the chosen font, outline and line spacing; defaults equal T.Font.
+function T.MessageFont(f,size,bold,color)
+    T.Font(f,size,bold,color)
+    local s=Z.store.settings;local face=T.fontFaces[s.fontFace]
+    local flags=s.fontOutline~='none'and s.fontOutline or''
+    if face or flags~=''then
+        local ok=pcall(f.SetFont,f,face or(bold and T.bold or T.font),size or 14,flags)
+        if not ok then pcall(f.SetFont,f,bold and T.bold or T.font,size or 14,'')end
+    end
+    if f.SetSpacing then f:SetSpacing(s.lineSpacing or 0)end
 end
 function T.Text(parent,text,size,bold,color)
     local f=parent:CreateFontString(nil,'OVERLAY');T.Font(f,size,bold,color);f:SetText(text or'');return f
@@ -71,6 +85,13 @@ function T.NameColor(font,classFile)
         HUNTER={.62,.82,.42},ROGUE={1,.90,.40},WARLOCK={.69,.55,.92},PALADIN={.96,.58,.76},SHAMAN={.27,.58,1}}
     local c=palette[classFile or'']or T.colors.goldBright;font:SetTextColor(unpack(c))
 end
+local function hexByte(value)return string.format('%02x',math.floor(math.max(0,math.min(1,value))*255+.5))end
+-- The color of T.NameColor as markup, for names written inside a text.
+function T.NameHex(classFile)
+    local holder={SetTextColor=function(self,r,g,b)self.r,self.g,self.b=r,g,b end}
+    T.NameColor(holder,classFile)
+    return hexByte(holder.r)..hexByte(holder.g)..hexByte(holder.b)
+end
 function T.Tooltip(owner,title,detail)
     if not GameTooltip then return end
     GameTooltip:SetOwner(owner,'ANCHOR_RIGHT');GameTooltip:ClearLines();GameTooltip:AddLine(title,1,.82,.4)
@@ -99,6 +120,38 @@ function T.SetIcon(icon,c)
     end
     if coords then icon.texture:SetTexture('Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES');icon.texture:SetTexCoord(unpack(coords))
     else icon.texture:SetTexture(T.icons[c.kind]or'Interface\\Icons\\INV_Misc_GroupLooking')end
+end
+local CLASS_TEXTURE='Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES'
+-- The atlas of a known race, if this client really has it. Unknown means no race icon, never a guess.
+local function raceAtlas(s,person)
+    if not person or type(person.race)~='string'or type(GetRaceAtlas)~='function'then return nil end
+    local gender=person.sex==2 and'male'or person.sex==3 and'female'
+    if not gender then return nil end
+    local atlas=Z.Call(GetRaceAtlas,person.race:lower(),gender,s.raceIconQuality=='hd')
+    if type(atlas)~='string'then return nil end
+    if C_Texture and C_Texture.GetAtlasInfo and not Z.Call(C_Texture.GetAtlasInfo,atlas)then return nil end
+    return atlas
+end
+-- The picture next to a message: race if chosen and known, otherwise the class, otherwise the chat type.
+function T.SetSenderIcon(icon,s,conv,class,person)
+    if s.senderIcon=='race'and icon.texture.SetAtlas then
+        local atlas=raceAtlas(s,person)
+        if atlas then
+            icon.texture:SetTexCoord(0,1,0,1)
+            if pcall(icon.texture.SetAtlas,icon.texture,atlas,false)then return end
+        end
+    end
+    T.SetIcon(icon,{kind=conv.kind,classFile=class})
+end
+-- The same picture as a text escape, for the classic list.
+function T.InlineIcon(s,class,person,size)
+    if s.senderIcon=='race'then
+        local atlas=raceAtlas(s,person)
+        if atlas then return string.format('|A:%s:%d:%d|a',atlas,size,size)end
+    end
+    local coords=class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
+    if not coords then return''end
+    return string.format('|T%s:%d:%d:0:0:256:256:%d:%d:%d:%d|t',CLASS_TEXTURE,size,size,coords[1]*256,coords[2]*256,coords[3]*256,coords[4]*256)
 end
 function T.Opacity(alpha)
     for _,f in ipairs(T.backgrounds)do local c=T.colors[f.zenialBackgroundKind]or T.colors.surface

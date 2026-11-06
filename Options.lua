@@ -1,8 +1,31 @@
 local _,Z=...
 local U=Z.UI
-local pages={{'appearance','Darstellung','Appearance'},{'behavior','Verhalten','Behavior'},{'notifications','Benachrichtigungen','Notifications'},{'history','Verlauf & Daten','History & data'}}
+local pages={{'appearance','Darstellung','Appearance'},{'messages','Nachrichten','Messages'},{'behavior','Verhalten','Behavior'},{'notifications','Benachrichtigungen','Notifications'},{'history','Verlauf & Daten','History & data'}}
 local function add(kind,label,options)
     local row=options or{};row.kind=kind;row.label=label;U.optionSpecs[#U.optionSpecs+1]=row;return row
+end
+-- A limit that would delete something asks first; nothing is removed if the answer is no.
+local function retentionSetter(key)
+    return function(v)
+        local s=Z.store.settings
+        local count=key=='retentionCount'and v or s.retentionCount
+        local days=key=='retentionDays'and v or s.retentionDays
+        local n=Z.store:CountPrunable(count,days)
+        local function apply()s[key]=v;Z.store:PruneAll();U.RebuildOptions()end
+        if n>0 then U.Confirm(string.format(Z.L('%d Nachrichten werden dauerhaft gelöscht. Fortfahren?','%d messages will be deleted for good. Continue?'),n),apply)
+        else apply()end
+    end
+end
+local function sizeLabel(bytes)
+    if bytes>=1048576 then return string.format('%.1f MB',bytes/1048576)end
+    return string.format('%.0f KB',bytes/1024)
+end
+local function soundChoices()
+    local list={}
+    for _,sound in ipairs(Z.Notifications.SOUNDS)do
+        if type(SOUNDKIT)=='table'and SOUNDKIT[sound[1]]then list[#list+1]={sound[1],Z.L(sound[2],sound[3])}end
+    end
+    return list
 end
 local function buildSpecs()
     local s=Z.store.settings;U.optionSpecs={}
@@ -17,15 +40,52 @@ local function buildSpecs()
         add('choice',Z.L('Seitenleiste','Sidebar'),{key='sidebar',choices={{'auto',Z.L('Automatisch','Automatic')},{'names',Z.L('Namen','Names')},{'icons',Z.L('Symbole','Icons')}}})
         add('note',Z.L('Bei wenig Platz entfallen zuerst Vorschauen, danach Namen.','At smaller widths, previews hide first, then names.'))
         add('check',Z.L('Nachrichtenvorschau anzeigen','Show last-message previews'),{key='previews'})
+        add('check',Z.L('Kompakte Seitenleiste','Compact sidebar'),{key='sidebarCompact'})
+        add('choice',Z.L('Kanal- und Gruppennamen','Channel and group names'),{key='channelLabels',choices={{'full',Z.L('Vollständig','Full')},{'short',Z.L('Kurz (Gilde: G, Schlachtzug: SZ)','Short (Guild: G, Raid: R)')},{'number',Z.L('Kanalnummer','Channel number')}}})
+        add('note',Z.L('Eigene Anzeigenamen vergibst du im Gesprächsmenü •••. Die Kanalnummer gilt nur für Kanäle, Gruppen zeigen dort ihr Kürzel.','Set your own display names in the ••• conversation menu. The number applies to channels only; groups show their short name.'))
         add('section',Z.L('Fenster','Window'))
         add('check',Z.L('Position und Größe sperren','Lock position and size'),{key='locked'})
         add('action',Z.L('Position und Größe zurücksetzen','Reset position and size'),{run=U.ResetGeometry})
         add('check',Z.L('Minimap-Icon ausblenden','Hide minimap icon'),{key='minimapHidden',after=U.ApplyMinimapVisibility})
+        add('section',Z.L('Ausblenden','Fading'))
+        add('check',Z.L('Fenster bei Inaktivität ausblenden','Fade the window when idle'),{key='fadeEnabled'})
+        add('slider',Z.L('Ausblenden nach','Fade after'),{key='fadeAfter',min=5,max=300,step=5,format=function(v)return math.floor(v)..' s'end})
+        add('slider',Z.L('Sichtbarkeit danach','Visibility afterwards'),{key='fadeAlpha',min=0,max=1,step=.05,format=function(v)return math.floor(v*100+.5)..' %'end})
+        add('note',Z.L('Überfahren, Tippen oder eine neue Nachricht blenden das Fenster wieder ein.','Hovering, typing or a new message bring the window back.'))
+    elseif U.settingsPage=='messages'then
+        add('section',Z.L('Namen','Names'))
+        add('choice',Z.L('Namensformat','Name format'),{key='nameFormat',choices={{'full',Z.L('Vorname Nachname','First Last')},{'first',Z.L('Nur Vorname','First name only')},{'last',Z.L('Nur Nachname','Last name only')},{'initialLast',Z.L('V. Nachname','F. Last')},{'firstInitial',Z.L('Vorname N.','First L.')},{'initials',Z.L('Initialen','Initials')}}})
+        add('note',Z.L('Gilt nur für Charaktere mit genau Vor- und Nachname. Andere Namen und Battle.net-Konten bleiben vollständig. Beim Überfahren steht immer der ganze Name da.','Applies only to characters with exactly a first and a last name. Other names and Battle.net accounts stay complete. Hovering always shows the whole name.'))
+        add('check',Z.L('Klassenfarben für Namen','Class colors for names'),{key='classColors'})
+        add('section',Z.L('Symbole','Icons'))
+        add('choice',Z.L('Symbol neben Nachrichten','Icon next to messages'),{key='senderIcon',choices={{'class',Z.L('Klasse','Class')},{'race',Z.L('Rasse','Race')},{'none',Z.L('Keines','None')}}})
+        add('choice',Z.L('Rassensymbole','Race icons'),{key='raceIconQuality',choices={{'hd',Z.L('Hohe Auflösung','High resolution')},{'sd',Z.L('Standard','Standard')}}})
+        add('slider',Z.L('Symbolgröße','Icon size'),{key='iconSize',min=16,max=48,step=2,format=function(v)return tostring(math.floor(v))end})
+        add('note',Z.L('Die Rasse ist erst nach einer neuen Nachricht der Person bekannt. Bis dahin steht dort die Klasse, ist auch die unbekannt, das Chat-Symbol.','A race is known only after a new message from that person. Until then the class is shown and, if that is unknown too, the chat icon.'))
+        add('section',Z.L('Zeit','Time'))
+        add('choice',Z.L('Zeitstempel','Timestamps'),{key='timeFormat',choices={{'hm','14:05'},{'hms','14:05:30'},{'date','06.11.2026 14:05'},{'relative',Z.L('Heute 14:05','Today 14:05')},{'off',Z.L('Aus','Off')}}})
+        add('choice',Z.L('Uhrzeit','Clock'),{key='timeZone',choices={{'local',Z.L('Lokale Zeit','Local time')},{'server',Z.L('Serverzeit','Server time')}}})
+        add('note',Z.L('Die Serverzeit gilt mit dem heutigen Abstand auch für ältere Nachrichten; über eine Zeitumstellung hinweg kann sie um eine Stunde abweichen. Überfahren zeigt Datum und Sekunden, Shift-Klick zitiert.','Server time applies today\'s offset to older messages too, so across a clock change it can be off by an hour. Hovering shows date and seconds, shift-click quotes.'))
+        add('check',Z.L('Datumstrenner anzeigen','Show date separators'),{key='dateSeparators'})
+        add('section',Z.L('Layout','Layout'))
+        add('choice',Z.L('Nachrichtenlayout','Message layout'),{key='layoutStyle',choices={{'bubbles',Z.L('Sprechblasen','Bubbles')},{'compact',Z.L('Kompakt','Compact')},{'classic',Z.L('Klassische Liste','Classic list')}}})
+        add('check',Z.L('Aufeinanderfolgende Nachrichten gruppieren','Group consecutive messages'),{key='groupMessages'})
+        add('choice',Z.L('Schriftart','Font'),{key='fontFace',choices={{'noto','Noto Sans'},{'friz','Friz Quadrata'},{'arial','Arial Narrow'},{'morpheus','Morpheus'},{'skurri','Skurri'}}})
+        add('choice',Z.L('Textkontur','Text outline'),{key='fontOutline',choices={{'none',Z.L('Keine','None')},{'OUTLINE',Z.L('Dünn','Thin')},{'THICKOUTLINE',Z.L('Dick','Thick')}}})
+        add('slider',Z.L('Zeilenabstand','Line spacing'),{key='lineSpacing',min=0,max=8,step=1,format=function(v)return tostring(math.floor(v))end})
+        add('section',Z.L('Links & Zitate','Links & quotes'))
+        add('check',Z.L('Webadressen erkennen','Detect web addresses'),{key='urlLinks'})
+        add('note',Z.L('Ein Klick zeigt die Adresse zum Kopieren. Addons können keinen Browser öffnen.','A click shows the address for copying. Addons cannot open a browser.'))
+        add('choice',Z.L('Zitat-Format','Quote format'),{key='quoteFormat',choices={{'text',Z.L('Nur Text','Text only')},{'sender',Z.L('Mit Absender','With sender')},{'time',Z.L('Mit Absender und Zeit','With sender and time')}}})
     elseif U.settingsPage=='behavior'then
         add('section',Z.L('Eingabe & Fenster','Input & window'))
         add('check',Z.L('Eingabe beim Öffnen fokussieren','Focus composer when opening'),{key='focusOnOpen'})
         add('check',Z.L('Bei Direktnachrichten automatisch öffnen (nicht im Kampf)','Open automatically for direct messages (not in combat)'),{key='autoOpen'})
         add('note',Z.L('Enter sendet · Shift+Enter fügt einen Zeilenumbruch ein. Escape löst zuerst den Eingabefokus.','Enter sends · Shift+Enter inserts a new line. Escape first releases input focus.'))
+        add('check',Z.L('Gesendete Nachrichten mit Pfeil hoch/runter abrufen','Recall sent messages with arrow up/down'),{key='inputHistory'})
+        add('choice',Z.L('Verlauf der Eingabe','Input history'),{key='inputHistoryScope',choices={{'conversation',Z.L('Je Gespräch','Per conversation')},{'global',Z.L('Für alle Gespräche','Across conversations')}}})
+        add('check',Z.L('Leseposition je Gespräch merken','Remember reading position per conversation'),{key='rememberScroll'})
+        add('check',Z.L('Suchverlauf speichern','Keep search history'),{key='searchHistoryEnabled'})
         add('note',Z.L('Tastenkürzel: WoW → Tastenbelegung → Zenial Chat. /zchat öffnet das Fenster.','Shortcut: WoW → Key Bindings → Zenial Chat. /zchat opens the window.'))
         add('section',Z.L('Öffentliche & eigene Kanäle','Public & custom channels'))
         add('check',Z.L('Öffentliche Kanäle im Messenger anbieten','Offer public channels in Messenger'),{key='publicChannels',after=function()U.RebuildOptions()end})
@@ -40,20 +100,42 @@ local function buildSpecs()
     elseif U.settingsPage=='notifications'then
         add('section',Z.L('Neue Nachrichten','New messages'))
         add('note',Z.L('Stummgeschaltete Gespräche behalten ihren Ungelesen-Zähler, spielen aber keinen Ton und zeigen keinen Hinweis.','Muted conversations keep unread counts, but do not play a sound or show a notification.'))
-        for _,group in ipairs({{'whispers','Direktnachrichten','Direct messages'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'channels','Öffentliche Kanäle','Public channels'}})do
+        add('note',Z.L('Der Client spielt bei Flüstern und Schlachtzugswarnungen selbst einen Ton. Ein Ton hier kommt zusätzlich hinzu; pro Sekunde spielt Zenial Chat höchstens einen.','The client plays its own sound for whispers and raid warnings. A sound here comes on top; Zenial Chat plays at most one per second.'))
+        add('slider',Z.L('Hinweis-Dauer','Notice duration'),{key='toastDuration',min=2,max=15,step=1,format=function(v)return math.floor(v)..' s'end})
+        add('check',Z.L('Im Kampf keine Töne und Hinweise','No sounds or notices in combat'),{key='suppressInCombat'})
+        add('action',Z.L('Hinweis-Vorschau anzeigen','Show notice preview'),{run=function()Z.Notifications.Preview()end})
+        for _,group in ipairs({{'whispers','Flüstern','Whispers'},{'bnet','Battle.net','Battle.net'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'raidWarning','Schlachtzugswarnungen','Raid warnings'},{'channels','Öffentliche Kanäle','Public channels'}})do
             local key=group[1];local label=Z.L(group[2],group[3])
             add('section',label)
             for _,setting in ipairs({{'sound','Ton abspielen','Play sound'},{'toast','Hinweis anzeigen','Show notification'}})do
                 local field=setting[1]
                 add('check',Z.L(setting[2],setting[3]),{get=function()return s.notifications[key][field]end,set=function(value)s.notifications[key][field]=value end})
             end
+            add('choice',Z.L('Ton','Sound'),{choices=soundChoices,get=function()return Z.Notifications.KitName(key,s.notifications[key])end,set=function(value)
+                s.notifications[key].soundKit=value;Z.Notifications.PlayKit(value)
+            end})
         end
         add('action',Z.L('Benachrichtigungston testen','Test notification sound'),{run=function()Z.Notifications.PlayTell()end})
         add('action',Z.L('Hinweisposition zurücksetzen','Reset notification position'),{run=function()Z.Notifications.ResetPosition()end})
         add('note',Z.L('Den Hinweis verschiebst du mit gedrückter linker Maustaste; ein einfacher Klick öffnet das Gespräch.','Drag the notification with the left mouse button to move it; a plain click opens the conversation.'))
     else
         add('section',Z.L('Dein lokales Archiv','Your local archive'))
-        add('note',Z.L('Nachrichten bleiben dauerhaft erhalten, bis du sie selbst löschst. Das Archiv wird auf diesem Computer über deine Charaktere geteilt.','Messages remain until you delete them. The archive is shared across your characters on this computer.'))
+        local conversations,messages,bytes=Z.store:Stats()
+        add('note',string.format(Z.L('%d Gespräche · %d Nachrichten · %s Text. Die Datei auf der Festplatte ist wegen der Zusatzdaten größer.','%d conversations · %d messages · %s of text. The file on disk is larger because of the extra data.'),conversations,messages,sizeLabel(bytes)))
+        if s.retentionCount>0 or s.retentionDays>0 then
+            add('note',Z.L('Ältere Nachrichten werden nach den Grenzen unten gelöscht. Das Archiv wird auf diesem Computer über deine Charaktere geteilt.','Older messages are deleted according to the limits below. The archive is shared across your characters on this computer.'))
+        else
+            add('note',Z.L('Nachrichten bleiben dauerhaft erhalten, bis du sie selbst löschst. Das Archiv wird auf diesem Computer über deine Charaktere geteilt.','Messages remain until you delete them. The archive is shared across your characters on this computer.'))
+        end
+        add('choice',Z.L('Höchstens pro Gespräch','Maximum per conversation'),{choices={{0,Z.L('Unbegrenzt','Unlimited')},{500,'500'},{1000,'1.000'},{5000,'5.000'},{10000,'10.000'},{50000,'50.000'}},get=function()return s.retentionCount end,set=retentionSetter('retentionCount')})
+        add('choice',Z.L('Höchstes Alter','Maximum age'),{choices={{0,Z.L('Unbegrenzt','Unlimited')},{30,Z.L('30 Tage','30 days')},{90,Z.L('90 Tage','90 days')},{180,Z.L('180 Tage','180 days')},{365,Z.L('1 Jahr','1 year')}},get=function()return s.retentionDays end,set=retentionSetter('retentionDays')})
+        do
+            local c=Z.store:Get(Z.store.db.ui.selected)
+            if c then
+                add('check',string.format(Z.L('„%s“ von den Grenzen ausnehmen','Exempt "%s" from the limits'),Z.Format.ConversationLabel(c)),{get=function()return c.keep==true end,set=function(value)Z.store:SetKeep(c.key,value)end})
+                add('action',Z.L('Ausgewähltes Gespräch exportieren …','Export selected conversation …'),{run=function()U.ExportConversation(c)end})
+            end
+        end
         add('note',Z.L('Gespräch schließen blendet es aus und erhält den Verlauf. Verlauf löschen leert nur das lokale Archiv.','Closing a conversation preserves its history. Clearing history only empties the local archive.'))
         add('action',Z.L('Verlauf des ausgewählten Gesprächs löschen …','Clear selected conversation history …'),{run=function()
             local c=Z.store:Get(Z.store.db.ui.selected)

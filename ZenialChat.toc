@@ -1,20 +1,22 @@
 ## Interface: 16001
 ## Title: Zenial Chat
-## Notes: Native messenger with conversations, shared history and community channels
-## Notes-deDE: Nativer Messenger mit Gesprächen, gemeinsamem Verlauf und Community-Kanälen
+## Notes: Native messenger with conversations and a shared local history
+## Notes-deDE: Nativer Messenger mit Gesprächen und gemeinsamem lokalen Verlauf
 ## Author: ZENIAL contributors
 ## Version: 0.1.3
 ## SavedVariables: ZenialChatDB, ZenialMinimapDB
-## OptionalDeps: ZenialCommunity
 ## IconTexture: Interface\AddOns\ZenialChat\Media\Icon.tga
 ## X-License: MIT
 Core.lua
 Store.lua
+Format.lua
+Search.lua
 Layout.lua
 Adapter.lua
 Theme.lua
 Transcript.lua
 UI.lua
+SearchUI.lua
 Options.lua
 Notifications.lua
 Main.lua
