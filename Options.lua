@@ -20,6 +20,7 @@ local function buildSpecs()
         add('section',Z.L('Fenster','Window'))
         add('check',Z.L('Position und Größe sperren','Lock position and size'),{key='locked'})
         add('action',Z.L('Position und Größe zurücksetzen','Reset position and size'),{run=U.ResetGeometry})
+        add('check',Z.L('Minimap-Icon ausblenden','Hide minimap icon'),{key='minimapHidden',after=U.ApplyMinimapVisibility})
     elseif U.settingsPage=='behavior'then
         add('section',Z.L('Eingabe & Fenster','Input & window'))
         add('check',Z.L('Eingabe beim Öffnen fokussieren','Focus composer when opening'),{key='focusOnOpen'})

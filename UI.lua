@@ -383,28 +383,40 @@ function U.Build()
     if saved then U.loadingDraft=true;U.input:SetText(saved.draft or'');U.loadingDraft=false;U.loadedKey=saved.key end
     U.Layout()
 end
+function U.ApplyMinimapVisibility()
+    if U.minimapButton then U.minimapButton:SetShown(Z.store.settings.minimapHidden~=true)end
+end
+-- Probed: a client without a working menu API falls back to the settings.
+local function openMinimapMenu(owner)
+    if type(MenuUtil)~='table'or type(MenuUtil.CreateContextMenu)~='function'then return false end
+    return(pcall(MenuUtil.CreateContextMenu,owner,function(_,root)
+        root:CreateTitle('Zenial Chat')
+        root:CreateButton(Z.L('Einstellungen','Settings'),function()U.OpenSettings('appearance')end)
+        root:CreateButton(Z.L('Icon ausblenden','Hide icon'),function()
+            Z.store.settings.minimapHidden=true;U.ApplyMinimapVisibility()
+            if U.settingsPanel and U.settingsPanel:IsShown()then U.RebuildOptions()end
+        end)
+    end))
+end
 function U.CreateMinimapButton()
     if U.minimapButton or not Minimap then return end
-    local button=CreateFrame('Button','ZenialChatMinimapButton',Minimap);U.minimapButton=button
-    button:SetSize(32,32);button:SetFrameLevel(Minimap:GetFrameLevel()+8)
-    button:RegisterForClicks('LeftButtonUp','RightButtonUp')
-    local icon=button:CreateTexture(nil,'ARTWORK');icon:SetSize(20,20);icon:SetPoint('CENTER')
-    icon:SetTexture(Z.Theme.icons.COMMUNITY)
-    local border=button:CreateTexture(nil,'OVERLAY');border:SetAllPoints()
-    local ok=border.SetAtlas and pcall(border.SetAtlas,border,'UI-HUD-Minimap-Frame-Cycle',false)
-    if not ok then border:SetTexture('Interface\\Minimap\\MiniMap-TrackingBorder');border:SetSize(54,54);border:ClearAllPoints();border:SetPoint('TOPLEFT')end
-    button:SetHighlightTexture('Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight')
-    button:SetScript('OnClick',function(_,mouseButton)
-        if mouseButton=='RightButton'then U.OpenSettings('appearance')else U.Toggle()end
-    end)
-    button:SetScript('OnEnter',function(self)Z.Theme.Tooltip(self,'Zenial Chat',Z.L('Linksklick: Chat öffnen / schließen\nRechtsklick: Einstellungen\nBefehl: /zchat','Left-click: Open / close chat\nRight-click: Settings\nCommand: /zchat'))end)
-    button:SetScript('OnLeave',function()if GameTooltip then GameTooltip:Hide()end end)
-    local function position()
-        local radius=math.min(Minimap:GetWidth(),Minimap:GetHeight())/2+16
-        local angle=math.rad(200)
-        button:ClearAllPoints();button:SetPoint('CENTER',Minimap,'CENTER',math.cos(angle)*radius,math.sin(angle)*radius)
-    end
-    Minimap:HookScript('OnSizeChanged',position);position()
+    local settings=Z.store.settings
+    U.minimapButton=Z.Launcher.CreateMinimapButton({
+        name='ZenialChatMinimapButton',icon=Z.Theme.icons.COMMUNITY,defaultAngle=200,
+        getAngle=function()return settings.minimapAngle end,
+        setAngle=function(angle)settings.minimapAngle=angle end,
+        onClick=function(self,mouseButton)
+            if mouseButton~='RightButton'then U.Toggle()
+            elseif not openMinimapMenu(self)then U.OpenSettings('appearance')end
+        end,
+        tooltip=function(tip)
+            tip:AddLine('Zenial Chat')
+            tip:AddLine(Z.L('Linksklick: Chat öffnen / schließen','Left-click: Open / close chat'),1,1,1)
+            tip:AddLine(Z.L('Rechtsklick: Optionen','Right-click: Options'),1,1,1)
+            tip:AddLine(Z.L('Befehl: /zchat','Command: /zchat'),1,1,1)
+        end,
+    })
+    U.ApplyMinimapVisibility()
 end
 function U.StartConversation()
     U.ShowCopy('',Z.L('Neue Nachricht · Spielername oder BattleTag','New message · Player name or BattleTag'));U.copy.edit:SetMultiLine(false)

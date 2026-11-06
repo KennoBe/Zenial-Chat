@@ -9,6 +9,7 @@ local defaults = {
     sidebar = 'auto', previews = true, locked = false, focusOnOpen = false,
     autoOpen = false, publicChannels = false, enabledChannels = {},
     clubId = nil, streams = {},
+    minimapHidden = false, minimapAngle = 200,
 }
 
 local function isFiniteNumber(value)
@@ -43,6 +44,7 @@ local function applyDefaults(settings)
     local numericBounds = {
         alphaActive = { 0, 1 }, alphaInactive = { 0, 1 },
         scale = { .75, 1.5 }, fontSize = { 12, 20 },
+        minimapAngle = { -360, 360 },
     }
     for key, bounds in pairs(numericBounds) do
         local value = settings[key]
@@ -50,7 +52,7 @@ local function applyDefaults(settings)
             settings[key] = defaults[key]
         end
     end
-    local booleanKeys = { 'previews', 'locked', 'focusOnOpen', 'autoOpen', 'publicChannels' }
+    local booleanKeys = { 'previews', 'locked', 'focusOnOpen', 'autoOpen', 'publicChannels', 'minimapHidden' }
     for _, key in ipairs(booleanKeys) do
         if type(settings[key]) ~= 'boolean' then settings[key] = defaults[key] end
     end

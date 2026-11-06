@@ -4,7 +4,7 @@
 ## Notes-deDE: Nativer Messenger mit Gesprächen, gemeinsamem Verlauf und Community-Kanälen
 ## Author: ZENIAL contributors
 ## Version: 0.1.1
-## SavedVariables: ZenialChatDB
+## SavedVariables: ZenialChatDB, ZenialMinimapDB
 ## OptionalDeps: ZenialCommunity
 ## IconTexture: Interface\AddOns\ZenialChat\Media\Icon.tga
 ## X-License: MIT
