@@ -126,8 +126,10 @@ function U.Toggle()
     if U.frame and U.frame:IsShown()then U.frame:Hide()else U.Open()end
 end
 function U.ShowMenu(anchor,items,atCursor)
+    if not atCursor and U.menu and U.menu:IsShown()and U.menu.anchor==anchor then U.menu:Hide();return end
     if U.menu then U.menu:Hide()end
     local T=Z.Theme;local menu=U.menu or T.Frame(U.frame,'shell','gold');U.menu=menu
+    menu.anchor=not atCursor and anchor or nil
     menu:SetFrameStrata('TOOLTIP');menu:SetSize(250,#items*30+12);menu:ClearAllPoints()
     if atCursor then
         -- The cursor starts inside the corner, so leaving the menu is what closes it.
@@ -372,7 +374,7 @@ function U.Refresh()
     U.placeholder:SetShown(U.input:GetText()=='')
     Z.Transcript.Render(U)
     U.RefreshRecovery()
-    Z.Theme.ButtonIcon(U.lock,Z.store.settings.locked and'Interface\\PetBattles\\PetBattle-LockIcon'or'Interface\\Icons\\INV_Misc_Key_01')
+    Z.Theme.ButtonIcon(U.lock,Z.store.settings.locked and'Interface\\PetBattles\\PetBattle-LockIcon'or'Interface\\Icons\\INV_Misc_Key_01',nil,24)
     U.lock.tip=Z.store.settings.locked and Z.L('Fenster gesperrt · Zum Entsperren klicken','Window locked · Click to unlock')or Z.L('Fenster entsperrt · Zum Sperren klicken','Window unlocked · Click to lock')
     U.UpdateAlpha()
     if U.RefreshSearchPanel then U.RefreshSearchPanel()end
@@ -456,7 +458,7 @@ function U.Build()
     U.titleBar:SetScript('OnDragStart',function()if not Z.store.settings.locked then f:StartMoving()end end)
     U.titleBar:SetScript('OnDragStop',function()f:StopMovingOrSizing();U.SaveGeometry()end)
     U.gear=T.Button(U.titleBar,'⚙',function()U.OpenSettings('appearance')end);U.gear.tip=Z.L('Einstellungen','Settings')
-    T.ButtonIcon(U.gear,'Interface\\Icons\\Trade_Engineering','GM-icon-settings')
+    T.ButtonIcon(U.gear,'Interface\\Icons\\Trade_Engineering','GM-icon-settings',24)
     U.lock=T.Button(U.titleBar,'◇',function()U.SetSetting('locked',not Z.store.settings.locked)end);U.lock.tip=Z.L('Position und Größe sperren','Lock position and size')
     U.close=Z.CloseButton(U.titleBar,function()f:Hide()end,Z.L('Schließen','Close'))
     U.listPanel=T.Frame(f,'sidebar','line')
@@ -485,6 +487,7 @@ function U.Build()
         local c=selected();if c then U.ConversationMenu(self,c)
         else U.StartConversation()end
     end);U.more.tip=Z.L('Gesprächsmenü · Neue Nachricht','Conversation menu · New message')
+    T.ButtonIcon(U.more,T.icons.WHISPER,nil,22)
     Z.Transcript.Build(U)
     U.composer=T.Frame(U.chatPanel,'shell','line');U.composer.opacityMultiplier=0
     U.input,U.inputBackground=T.Input(U.composer);U.input:SetMultiLine(true);U.input:SetHyperlinksEnabled(true)
@@ -504,6 +507,7 @@ function U.Build()
     U.recovery=T.Button(U.chatPanel,Z.L('Fehlgeschlagenen Text wiederherstellen','Restore failed message'),function()U.RestoreRecovery(U.recoveryAttempt)end);U.recovery:Hide()
     U.settingsPanel=T.Frame(f,'shell','line');U.settingsPanel:Hide();U.settingsNav=T.Frame(f,'sidebar','line');U.settingsNav:Hide()
     U.back=T.Button(U.settingsPanel,Z.L('Zurück zum Chat','Back to chat'),function()
+        if U.menu then U.menu:Hide()end
         U.settingsPanel:Hide();U.settingsNav:Hide();U.listPanel:Show();U.chatPanel:Show();U.back:Hide();U.Layout()
     end);U.back:Hide()
     U.grip=CreateFrame('Button',nil,f);U.grip.texture=U.grip:CreateTexture(nil,'ARTWORK');U.grip.texture:SetAllPoints();U.grip.texture:SetTexture('Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up')

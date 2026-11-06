@@ -71,9 +71,9 @@ function T.Button(parent,label,fn,style)
     f:SetScript('OnLeave',function()if GameTooltip then GameTooltip:Hide()end end)
     return f
 end
-function T.ButtonIcon(button,texture,atlas)
+function T.ButtonIcon(button,texture,atlas,size)
     if not button.symbol then button.symbol=button:CreateTexture(nil,'ARTWORK')end
-    button.symbol:ClearAllPoints();button.symbol:SetPoint('CENTER');button.symbol:SetSize(19,19)
+    button.symbol:ClearAllPoints();button.symbol:SetPoint('CENTER');button.symbol:SetSize(size or 19,size or 19)
     button.symbol:SetTexture(texture)
     if atlas and button.symbol.SetAtlas then pcall(button.symbol.SetAtlas,button.symbol,atlas,false)end
     button.label:SetText('');return button.symbol
