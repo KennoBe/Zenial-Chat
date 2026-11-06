@@ -8,7 +8,6 @@ local defaults = {
     alphaActive = .98, alphaInactive = .94, scale = 1, fontSize = 14,
     sidebar = 'auto', previews = true, locked = false, focusOnOpen = false,
     autoOpen = false, publicChannels = false, enabledChannels = {},
-    clubId = nil, streams = {},
     minimapHidden = false, minimapAngle = 200,
 }
 
@@ -68,15 +67,16 @@ local function applyDefaults(settings)
         settings.toastPos = nil
     end
     if type(settings.enabledChannels) ~= 'table' then settings.enabledChannels = {} end
-    if type(settings.streams) ~= 'table' then settings.streams = {} end
+    -- Left behind by versions with Community chats.
+    settings.clubId, settings.streams = nil, nil
     local notificationDefaults = {
         whispers = { sound = true, toast = true },
         guild = { sound = false, toast = false },
         groups = { sound = false, toast = false },
-        community = { sound = false, toast = false },
         channels = { sound = false, toast = false },
     }
     local notifications = ensureTable(settings, 'notifications')
+    notifications.community = nil
     for group, values in pairs(notificationDefaults) do
         local saved = ensureTable(notifications, group)
         for key, default in pairs(values) do
@@ -90,11 +90,11 @@ local function lower(value)
 end
 
 local kindGroups = {
-    COMMUNITY = 'community', GUILD = 'guild', OFFICER = 'guild',
+    GUILD = 'guild', OFFICER = 'guild',
     PARTY = 'groups', RAID = 'groups', INSTANCE_CHAT = 'groups',
     WHISPER = 'people', BN_WHISPER = 'people', CHANNEL = 'channels',
 }
-local groupOrder = { community = 1, guild = 2, groups = 3, people = 4, channels = 5 }
+local groupOrder = { guild = 1, groups = 2, people = 3, channels = 4 }
 
 function Store.Group(kind)
     return kindGroups[string.upper(tostring(kind or ''))]
@@ -113,9 +113,6 @@ function Store.Key(spec)
     if kind == 'WHISPER' or kind == 'BN_WHISPER' then
         parts[#parts + 1] = encode(spec.target)
         if spec.scope ~= nil then parts[#parts + 1] = encode(spec.scope) end
-    elseif kind == 'COMMUNITY' then
-        parts[#parts + 1] = encode(spec.clubId)
-        parts[#parts + 1] = encode(spec.streamId)
     elseif kind == 'CHANNEL' then
         parts[#parts + 1] = encode(spec.scope)
         parts[#parts + 1] = encode(spec.channelName or spec.target)
@@ -156,6 +153,13 @@ function Store.New(db, nowFn)
     if ui.selected ~= nil and type(ui.selected) ~= 'string' then ui.selected = tostring(ui.selected) end
     self.ui = ui
     self.conversations = ensureTable(db, 'conversations')
+    -- Community chats are gone; their cached conversations could no longer load anything.
+    for key, conversation in pairs(self.conversations) do
+        if type(conversation) == 'table' and conversation.kind == 'COMMUNITY' then
+            self.conversations[key] = nil
+            if ui.selected == tostring(conversation.key or key) then ui.selected = nil end
+        end
+    end
     for key, conversation in pairs(self.conversations) do
         if type(conversation) == 'table' then
             conversation.key = tostring(conversation.key or key)
@@ -187,7 +191,7 @@ function Store:Ensure(spec)
     if not conversation then
         conversation = {
             key = key, kind = string.upper(tostring(spec.kind or '')), name = tostring(spec.name or spec.target or ''),
-            target = spec.target, scope = spec.scope, clubId = spec.clubId, streamId = spec.streamId,
+            target = spec.target, scope = spec.scope,
             channelName = spec.channelName, classFile = spec.classFile, messages = {}, draft = '',
             unread = 0, pinned = false, muted = false, closed = false, last = 0,
         }
@@ -196,7 +200,7 @@ function Store:Ensure(spec)
         notify(self, 'conversation', key)
     else
         conversation.kind = conversation.kind or string.upper(tostring(spec.kind or ''))
-        for _, field in ipairs({ 'name', 'target', 'scope', 'clubId', 'streamId', 'channelName', 'classFile' }) do
+        for _, field in ipairs({ 'name', 'target', 'scope', 'channelName', 'classFile' }) do
             if spec[field] ~= nil then conversation[field] = spec[field] end
         end
     end
@@ -332,13 +336,13 @@ end
 
 function Store:Clear(key)
     local conversation = self:Get(key); if not conversation then return false end
-    conversation.messages = {}; conversation.unread = 0; conversation.historySync=nil; self._messageIndexes[conversation.key] = {}
+    conversation.messages = {}; conversation.unread = 0; self._messageIndexes[conversation.key] = {}
     notify(self, 'clear', conversation.key)
     return true
 end
 function Store:ClearAll()
     for key, conversation in pairs(self.conversations) do
-        conversation.messages = {}; conversation.unread = 0; conversation.historySync=nil; self._messageIndexes[conversation.key or key] = {}
+        conversation.messages = {}; conversation.unread = 0; self._messageIndexes[conversation.key or key] = {}
     end
     notify(self, 'clear-all', nil)
 end
@@ -367,11 +371,6 @@ function Store:List(query)
         local gb = groupOrder[Store.Group(b.kind)] or 99
         if ga ~= gb then return ga < gb end
         if a.pinned ~= b.pinned then return a.pinned == true end
-        if a.kind=='COMMUNITY'and b.kind=='COMMUNITY'then
-            local slots={general=1,horde=2,alliance=3}
-            local sa,sb=slots[a.slot]or 4,slots[b.slot]or 4
-            if sa~=sb then return sa<sb end
-        end
         if a.last ~= b.last then return (a.last or 0) > (b.last or 0) end
         local an, bn = lower(a.name), lower(b.name)
         if an ~= bn then return an < bn end

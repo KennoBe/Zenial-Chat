@@ -2,7 +2,7 @@ local _,Z=...
 local U={rows={},headers={},listScroll=0,dirty=false,settingsPage='appearance'};Z.UI=U
 local function selected()return Z.store and Z.store:Get(Z.store.db.ui.selected)end
 local function textTime(at)return Z.Call(date,'%H:%M',at or 0)or''end
-local titles={community={'Zenial Community','Zenial Community'},guild={'Gilde','Guild'},groups={'Gruppen','Groups'},people={'Direktnachrichten','Direct messages'},channels={'Kanäle','Channels'}}
+local titles={guild={'Gilde','Guild'},groups={'Gruppen','Groups'},people={'Direktnachrichten','Direct messages'},channels={'Kanäle','Channels'}}
 local function caption(group)local a=titles[group]or{'Gespräche','Conversations'};return Z.L(a[1],a[2])end
 function U.Notice(message)
     U.Build();U.notice:SetText(message or'');U.notice:SetShown(message~=nil and message~='')
@@ -18,11 +18,6 @@ function U.ScrollTo(value)
     if not U.frame then return end
     U.scroll=math.max(0,math.min(U.maximum or 0,tonumber(value)or 0));U.atEnd=(U.maximum or 0)-U.scroll<=2
     Z.Transcript.Render(U)
-    local c=selected()
-    if c and c.kind=='COMMUNITY'and U.scroll<40 and Z.Clock()>(U.nextHistory or 0)then
-        U.nextHistory=Z.Clock()+1
-        local ok,err=Z.adapter.community:RequestHistory(c,true);if not ok and err then U.Notice(err)end
-    end
 end
 function U.SaveGeometry()
     if not U.frame then return end
@@ -90,7 +85,6 @@ function U.Select(key,messageId)
         if not index then for i,row in ipairs(c.messages)do if row.id==messageId then index=i;break end end end
         if index and U.prefix[index]then U.ScrollTo(U.prefix[index])end
     end
-    if c.kind=='COMMUNITY'then Z.adapter.community:RequestHistory(c)end
 end
 function U.Open()
     if not Z.ready then Z.Initialize()end
@@ -157,7 +151,7 @@ function U.ConversationMenu(anchor,c)
         {text=c.pinned and Z.L('Lösen','Unpin')or Z.L('Anpinnen','Pin'),run=function()Z.store:SetPinned(c.key,not c.pinned)end},
         {text=c.muted and Z.L('Stummschaltung aufheben','Unmute')or Z.L('Stummschalten','Mute'),run=function()Z.store:SetMuted(c.key,not c.muted)end},
         {text=Z.L('Gespräch schließen','Close conversation'),run=function()Z.store:SetClosed(c.key,true);if selected()==c then Z.store:Select(nil);U.Refresh()end end},
-        {text=Z.L('Verlauf löschen …','Clear history …'),run=function()U.Confirm(Z.L('Diesen lokalen Verlauf löschen? Alte Community-Nachrichten können erneut geladen werden.','Clear this local history? Older community messages can be loaded again.'),function()Z.store:Clear(c.key)end)end},
+        {text=Z.L('Verlauf löschen …','Clear history …'),run=function()U.Confirm(Z.L('Diesen lokalen Verlauf löschen?','Clear this local history?'),function()Z.store:Clear(c.key)end)end},
     })
 end
 -- Addons have no clipboard access: copying means the selected text in the copy window plus Ctrl+C.
@@ -248,7 +242,7 @@ function U.Refresh()
     if not U.frame then return end
     U.dirty=false;U.RefreshList();local c=selected()
     U.channelName:SetText(c and c.name or Z.L('Deine Gespräche','Your conversations'))
-    U.channelDetail:SetText(c and(c.kind=='COMMUNITY'and'Zenial Community'or caption(Z.Store.Group(c.kind)))or Z.L('Wähle ein Gespräch oder starte eine Nachricht.','Choose a conversation or start a message.'))
+    U.channelDetail:SetText(c and caption(Z.Store.Group(c.kind))or Z.L('Wähle ein Gespräch oder starte eine Nachricht.','Choose a conversation or start a message.'))
     Z.Theme.SetIcon(U.channelIcon,c or{kind='COMMUNITY'})
     if c then U.input:Enable()else U.input:Disable()end;U.send:SetEnabled(c~=nil)
     U.placeholder:SetShown(U.input:GetText()=='')
@@ -336,7 +330,7 @@ function U.Build()
     U.listViewport=CreateFrame('ScrollFrame',nil,U.listPanel);U.listViewport:SetClipsChildren(true)
     U.listCanvas=CreateFrame('Frame',nil,U.listViewport);U.listViewport:SetScrollChild(U.listCanvas)
     U.listViewport:EnableMouseWheel(true);U.listViewport:SetScript('OnMouseWheel',function(_,delta)U.listScroll=math.max(0,U.listScroll-delta*50);U.RefreshList()end)
-    U.listEmpty=T.Text(U.listCanvas,Z.L('Noch keine Gespräche.\n\nStarte über ••• eine Nachricht oder wähle deine Community in den Einstellungen.','No conversations yet.\n\nStart a message with ••• or select your community in Settings.'),12,false,'muted');U.listEmpty:SetWordWrap(true)
+    U.listEmpty=T.Text(U.listCanvas,Z.L('Noch keine Gespräche.\n\nStarte über ••• eine Nachricht.','No conversations yet.\n\nStart a message with •••.'),12,false,'muted');U.listEmpty:SetWordWrap(true)
     U.chatPanel=T.Frame(f,'shell','line')
     U.channelIcon=T.Icon(U.chatPanel,{kind='COMMUNITY'});U.channelName=T.Text(U.chatPanel,'',20,true);U.channelDetail=T.Text(U.chatPanel,'',12,false,'muted')
     U.more=T.Button(U.chatPanel,'•••',function(self)

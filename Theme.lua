@@ -98,7 +98,7 @@ function T.SetIcon(icon,c)
         if ok then return end
     end
     if coords then icon.texture:SetTexture('Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES');icon.texture:SetTexCoord(unpack(coords))
-    else icon.texture:SetTexture(T.icons[c.slot or'']or T.icons[c.kind]or'Interface\\Icons\\INV_Misc_GroupLooking')end
+    else icon.texture:SetTexture(T.icons[c.kind]or'Interface\\Icons\\INV_Misc_GroupLooking')end
 end
 function T.Opacity(alpha)
     for _,f in ipairs(T.backgrounds)do local c=T.colors[f.zenialBackgroundKind]or T.colors.surface

@@ -18,15 +18,3 @@ frame:SetScript('OnEvent',function(_,event,...)
     Z.Notifications.Incoming(c,row,added)
     Z.UI.RequestRefresh(event,c and c.key)
 end)
-local historyTick=0
--- The 10 Hz history pump only runs while community history work is pending.
-local function historyUpdate(_,elapsed)
-    historyTick=historyTick+elapsed
-    if historyTick>=.1 then
-        historyTick=0
-        local community=Z.adapter and Z.adapter.community
-        if community and community.Tick then community:Tick()end
-        if not community or not community.pending or next(community.pending)==nil then frame:SetScript('OnUpdate',nil)end
-    end
-end
-function Z.WakeHistory()historyTick=0;frame:SetScript('OnUpdate',historyUpdate)end

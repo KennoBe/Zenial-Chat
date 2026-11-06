@@ -27,18 +27,6 @@ local function buildSpecs()
         add('check',Z.L('Bei Direktnachrichten automatisch öffnen (nicht im Kampf)','Open automatically for direct messages (not in combat)'),{key='autoOpen'})
         add('note',Z.L('Enter sendet · Shift+Enter fügt einen Zeilenumbruch ein. Escape löst zuerst den Eingabefokus.','Enter sends · Shift+Enter inserts a new line. Escape first releases input focus.'))
         add('note',Z.L('Tastenkürzel: WoW → Tastenbelegung → Zenial Chat. /zchat öffnet das Fenster.','Shortcut: WoW → Key Bindings → Zenial Chat. /zchat opens the window.'))
-        add('section',Z.L('Zenial Community','Zenial Community'))
-        local community=Z.adapter.community
-        add('choice',Z.L('Community','Community'),{get=function()return s.clubId end,choices=function()
-            local result={};for _,club in ipairs(community:Clubs())do result[#result+1]={tostring(club.id),club.name}end;return result
-        end,set=function(id)community:SelectClub(id);U.RebuildOptions()end})
-        for _,slot in ipairs({{'general','Allgemein','General'},{'horde','Horde','Horde'},{'alliance','Allianz','Alliance'}})do
-            local name=slot[1]
-            add('choice',Z.L(slot[2],slot[3]),{get=function()return s.streams[name]end,choices=function()
-                local result={};for _,stream in ipairs(community:Streams(s.clubId))do result[#result+1]={tostring(stream.id),stream.name}end;return result
-            end,set=function(id)community:SetStream(name,id);U.RebuildOptions()end})
-        end
-        add('note',Z.L('Es werden bestehende Community-Kanäle verwendet. Bei gleichnamigen Kanälen wählst du das Ziel hier ausdrücklich aus.','Existing community channels are used. Select the exact destination here when names are ambiguous.'))
         add('section',Z.L('Öffentliche & eigene Kanäle','Public & custom channels'))
         add('check',Z.L('Öffentliche Kanäle im Messenger anbieten','Offer public channels in Messenger'),{key='publicChannels',after=function()U.RebuildOptions()end})
         if s.publicChannels then
@@ -52,7 +40,7 @@ local function buildSpecs()
     elseif U.settingsPage=='notifications'then
         add('section',Z.L('Neue Nachrichten','New messages'))
         add('note',Z.L('Stummgeschaltete Gespräche behalten ihren Ungelesen-Zähler, spielen aber keinen Ton und zeigen keinen Hinweis.','Muted conversations keep unread counts, but do not play a sound or show a notification.'))
-        for _,group in ipairs({{'whispers','Direktnachrichten','Direct messages'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'community','Community','Community'},{'channels','Öffentliche Kanäle','Public channels'}})do
+        for _,group in ipairs({{'whispers','Direktnachrichten','Direct messages'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'channels','Öffentliche Kanäle','Public channels'}})do
             local key=group[1];local label=Z.L(group[2],group[3])
             add('section',label)
             for _,setting in ipairs({{'sound','Ton abspielen','Play sound'},{'toast','Hinweis anzeigen','Show notification'}})do
@@ -66,14 +54,14 @@ local function buildSpecs()
     else
         add('section',Z.L('Dein lokales Archiv','Your local archive'))
         add('note',Z.L('Nachrichten bleiben dauerhaft erhalten, bis du sie selbst löschst. Das Archiv wird auf diesem Computer über deine Charaktere geteilt.','Messages remain until you delete them. The archive is shared across your characters on this computer.'))
-        add('note',Z.L('Gespräch schließen blendet es aus und erhält den Verlauf. Verlauf löschen leert nur das lokale Archiv. Alte Community-Nachrichten können später wieder geladen werden.','Closing a conversation preserves its history. Clearing history only empties the local archive. Older community messages can be loaded again later.'))
+        add('note',Z.L('Gespräch schließen blendet es aus und erhält den Verlauf. Verlauf löschen leert nur das lokale Archiv.','Closing a conversation preserves its history. Clearing history only empties the local archive.'))
         add('action',Z.L('Verlauf des ausgewählten Gesprächs löschen …','Clear selected conversation history …'),{run=function()
             local c=Z.store:Get(Z.store.db.ui.selected)
             if not c then U.Notice(Z.L('Wähle zuerst ein Gespräch.','Select a conversation first.'));return end
             U.Confirm(Z.L('Lokalen Verlauf von ','Clear local history for ')..c.name..'?',function()Z.store:Clear(c.key)end)
         end})
         add('action',Z.L('Alle lokalen Verläufe löschen …','Clear all local history …'),{run=function()
-            U.Confirm(Z.L('Alle lokalen Verläufe löschen? Community-Nachrichten können später erneut geladen werden.','Clear all local history? Community messages can be loaded again later.'),function()Z.store:ClearAll()end)
+            U.Confirm(Z.L('Alle lokalen Verläufe löschen?','Clear all local history?'),function()Z.store:ClearAll()end)
         end})
     end
 end

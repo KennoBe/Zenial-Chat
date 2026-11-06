@@ -11,9 +11,7 @@ A.events={'PLAYER_ENTERING_WORLD','PLAYER_GUILD_UPDATE','GROUP_ROSTER_UPDATE','C
  'CHAT_MSG_WHISPER','CHAT_MSG_WHISPER_INFORM','CHAT_MSG_BN_WHISPER','CHAT_MSG_BN_WHISPER_INFORM',
  'CHAT_MSG_GUILD','CHAT_MSG_OFFICER','CHAT_MSG_PARTY','CHAT_MSG_PARTY_LEADER','CHAT_MSG_RAID','CHAT_MSG_RAID_LEADER',
  'CHAT_MSG_INSTANCE_CHAT','CHAT_MSG_INSTANCE_CHAT_LEADER','CHAT_MSG_CHANNEL','CHAT_MSG_SYSTEM',
- 'CHAT_MSG_BN_WHISPER_PLAYER_OFFLINE','CHAT_MSG_RESTRICTED','CHAT_MSG_CHANNEL_NOTICE_USER',
- 'CLUB_ADDED','CLUB_REMOVED','CLUB_UPDATED','CLUB_MEMBER_UPDATED','CLUB_STREAM_ADDED','CLUB_STREAM_REMOVED','CLUB_STREAM_UPDATED',
- 'CLUB_MESSAGE_ADDED','CLUB_MESSAGE_UPDATED','CLUB_MESSAGE_HISTORY_RECEIVED','CLUB_ERROR','INITIAL_CLUBS_LOADED'}
+ 'CHAT_MSG_BN_WHISPER_PLAYER_OFFLINE','CHAT_MSG_RESTRICTED','CHAT_MSG_CHANNEL_NOTICE_USER'}
 function A:Safe(...)
  for i=1,select('#',...)do local v=select(i,...)
   if type(self.api.issecretvalue)=='function'then local ok,secret=pcall(self.api.issecretvalue,v);if not ok or secret then return false end end
@@ -34,7 +32,6 @@ local function clock()return Z.Clock and Z.Clock()or now()end
 local function changed(reason,key)if Z.Changed then Z.Changed(reason,key)end end
 function A.New(store,api)
  local self=setmetatable({store=store,api=api or _G,me={},attempts={},recoveries={},serial=0,session=tostring(now())..':'..tostring(clock())},A)
- if Z.Community then self.community=Z.Community.New(self,store,self.api)end
  self:RefreshIdentity();return self
 end
 function A:FullName(name,realm)
@@ -92,7 +89,6 @@ function A:RefreshIdentity()
   if self.groupConversation~=previousConversation then marker(self.groupConversation)end
  end
  if self.store.settings.publicChannels then for _,ch in ipairs(self:JoinedChannels())do if ch.selected then self:ChannelConversation(ch.name)end end end
- if self.community then self.community:Discover()end
  changed('identity')
 end
 -- Roster/channel events arrive in bursts: one refresh runs IDENTITY_DELAY after the
@@ -168,9 +164,8 @@ function A:DismissRecovery(id)
 end
 function A:Send(c,text)
  if not c or not self:Text(text)or not text:find('%S')then return false,L('Gib eine Nachricht ein.','Enter a message.')end
- local max=c.kind=='BN_WHISPER'and 500 or c.kind=='COMMUNITY'and 512 or 255
+ local max=c.kind=='BN_WHISPER'and 500 or 255
  if #text>max then return false,L('Nachricht überschreitet das native Limit ('..max..' Bytes).','Message exceeds the native limit ('..max..' bytes).')end
- if c.kind=='COMMUNITY'then if not self.community then return false,L('Community-API nicht verfügbar.','Community API unavailable.')end;return self.community:Send(c,text)end
  local p=self.api;local fn,target
  if c.kind=='BN_WHISPER'then target=c.target and self:ResolveAccount(c.target);fn=p.C_BattleNet and p.C_BattleNet.SendWhisper or p.BNSendWhisper
  elseif c.kind=='WHISPER'then target=c.target;fn=p.C_ChatInfo and p.C_ChatInfo.SendChatMessage or p.SendChatMessage
@@ -192,7 +187,6 @@ function A:Send(c,text)
  return true,nil,a.id
 end
 function A:OnEvent(event,...)
- if event:find('^CLUB_')or event=='INITIAL_CLUBS_LOADED'then if self.community then return self.community:OnEvent(event,...)end;return end
  if event=='PLAYER_ENTERING_WORLD'or event=='PLAYER_GUILD_UPDATE'or event=='GROUP_ROSTER_UPDATE'or event=='CHANNEL_UI_UPDATE'or event=='CHANNEL_COUNT_UPDATE'then self:QueueIdentity();return end
  local args={...}
  if event=='CHAT_MSG_SYSTEM'then
