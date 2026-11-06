@@ -9,7 +9,32 @@ local defaults = {
     sidebar = 'auto', previews = true, locked = false, focusOnOpen = false,
     autoOpen = false, publicChannels = false, enabledChannels = {},
     minimapHidden = false, minimapAngle = 200,
+    -- Every default below reproduces the look and behavior from before these options existed.
+    nameFormat = 'full', senderIcon = 'class', raceIconQuality = 'hd', iconSize = 34, classColors = true,
+    timeFormat = 'hm', timeZone = 'local', dateSeparators = true,
+    channelLabels = 'full', sidebarCompact = false,
+    layoutStyle = 'bubbles', groupMessages = false, fontFace = 'noto', fontOutline = 'none', lineSpacing = 0,
+    urlLinks = true, quoteFormat = 'sender',
+    inputHistory = true, inputHistoryScope = 'conversation',
+    rememberScroll = true, fadeEnabled = false, fadeAfter = 30, fadeAlpha = .25,
+    searchHistoryEnabled = false,
+    retentionCount = 0, retentionDays = 0,
+    toastDuration = 5, suppressInCombat = false,
 }
+local enumerations = {
+    nameFormat = { full = true, first = true, last = true, initialLast = true, firstInitial = true, initials = true },
+    senderIcon = { class = true, race = true, none = true },
+    raceIconQuality = { hd = true, sd = true },
+    timeFormat = { hm = true, hms = true, date = true, relative = true, off = true },
+    timeZone = { ['local'] = true, server = true },
+    channelLabels = { full = true, short = true, number = true },
+    layoutStyle = { bubbles = true, compact = true, classic = true },
+    fontFace = { noto = true, friz = true, arial = true, morpheus = true, skurri = true },
+    fontOutline = { none = true, OUTLINE = true, THICKOUTLINE = true },
+    quoteFormat = { text = true, sender = true, time = true },
+    inputHistoryScope = { conversation = true, global = true },
+}
+local SENT_PER_CONVERSATION, SENT_GLOBAL, SEARCH_HISTORY, PEOPLE_LIMIT = 30, 100, 10, 20000
 
 local function isFiniteNumber(value)
     return type(value) == 'number' and value == value and value ~= math.huge and value ~= -math.huge
@@ -43,7 +68,9 @@ local function applyDefaults(settings)
     local numericBounds = {
         alphaActive = { 0, 1 }, alphaInactive = { 0, 1 },
         scale = { .75, 1.5 }, fontSize = { 12, 20 },
-        minimapAngle = { -360, 360 },
+        minimapAngle = { -360, 360 }, iconSize = { 16, 48 }, lineSpacing = { 0, 8 },
+        fadeAfter = { 5, 300 }, fadeAlpha = { 0, 1 }, toastDuration = { 2, 15 },
+        retentionCount = { 0, 1000000 }, retentionDays = { 0, 36500 },
     }
     for key, bounds in pairs(numericBounds) do
         local value = settings[key]
@@ -51,9 +78,14 @@ local function applyDefaults(settings)
             settings[key] = defaults[key]
         end
     end
-    local booleanKeys = { 'previews', 'locked', 'focusOnOpen', 'autoOpen', 'publicChannels', 'minimapHidden' }
+    local booleanKeys = { 'previews', 'locked', 'focusOnOpen', 'autoOpen', 'publicChannels', 'minimapHidden',
+        'classColors', 'dateSeparators', 'sidebarCompact', 'groupMessages', 'urlLinks', 'inputHistory',
+        'rememberScroll', 'fadeEnabled', 'searchHistoryEnabled', 'suppressInCombat' }
     for _, key in ipairs(booleanKeys) do
         if type(settings[key]) ~= 'boolean' then settings[key] = defaults[key] end
+    end
+    for key, allowed in pairs(enumerations) do
+        if not allowed[settings[key]] then settings[key] = defaults[key] end
     end
     if settings.sidebar ~= 'auto' and settings.sidebar ~= 'names' and settings.sidebar ~= 'icons' then
         settings.sidebar = defaults.sidebar
@@ -74,19 +106,42 @@ local function applyDefaults(settings)
         guild = { sound = false, toast = false },
         groups = { sound = false, toast = false },
         channels = { sound = false, toast = false },
+        bnet = { sound = true, toast = true },
+        -- The client plays its own raid warning sound; a second one stays opt-in.
+        raidWarning = { sound = false, toast = false },
     }
     local notifications = ensureTable(settings, 'notifications')
     notifications.community = nil
+    -- Battle.net used to share the whisper switches: an existing choice carries over once.
+    if type(notifications.bnet) ~= 'table' and type(notifications.whispers) == 'table' then
+        notifications.bnet = { sound = notifications.whispers.sound, toast = notifications.whispers.toast }
+    end
     for group, values in pairs(notificationDefaults) do
         local saved = ensureTable(notifications, group)
         for key, default in pairs(values) do
             if type(saved[key]) ~= 'boolean' then saved[key] = default end
         end
+        if saved.soundKit ~= nil and type(saved.soundKit) ~= 'string' then saved.soundKit = nil end
     end
 end
 
 local function lower(value)
     return string.lower(tostring(value or ''))
+end
+
+local upperToLower = {}
+for byte = 65, 90 do upperToLower[string.char(byte)] = string.char(byte + 32) end
+
+-- Case folding for searches. string.lower only knows ASCII; this also covers Latin-1 letters such
+-- as Ä/Ö/Ü and keeps the byte length. Conversation keys keep using lower(): they must stay stable.
+function Store.Fold(value)
+    -- Explicit table: string.lower may follow the C locale and damage UTF-8 bytes.
+    local text = tostring(value or ''):gsub('[A-Z]', upperToLower)
+    if not text:find('\195', 1, true) then return text end
+    return (text:gsub('\195([\128-\158])', function(byte)
+        if byte == '\151' then return nil end
+        return '\195' .. string.char(byte:byte() + 32)
+    end))
 end
 
 local kindGroups = {
@@ -170,12 +225,21 @@ function Store.New(db, nowFn)
             conversation.muted = conversation.muted == true
             conversation.closed = conversation.closed == true
             conversation.last = isFiniteNumber(conversation.last) and conversation.last or 0
+            -- A group has no class: earlier versions stored the class of whoever spoke last.
+            if conversation.kind ~= 'WHISPER' then conversation.classFile = nil end
+            if type(conversation.alias) ~= 'string' then conversation.alias = nil end
+            if conversation.notify ~= 'always' then conversation.notify = nil end
+            conversation.keep = conversation.keep == true or nil
             self._messageIndexes[conversation.key] = {}
             indexConversation(self, conversation)
         else
             self.conversations[key] = nil
         end
     end
+    self.people = ensureTable(db, 'people')
+    self._peopleCount = 0
+    for _ in pairs(self.people) do self._peopleCount = self._peopleCount + 1 end
+    if self.settings.retentionCount > 0 or self.settings.retentionDays > 0 then self:PruneAll() end
     return self
 end
 
@@ -279,6 +343,7 @@ function Store:Append(conversation, message, visibleAtEnd)
         if not visibleAtEnd then conversation.unread = (tonumber(conversation.unread) or 0) + 1 end
         conversation.closed = false
     end
+    self:Prune(conversation)
     notify(self, 'message', key)
     return stored, true
 end
@@ -334,6 +399,119 @@ function Store:SetClosed(key, value)
     return true
 end
 
+function Store:SetAlias(key, text)
+    local conversation = self:Get(key); if not conversation then return false end
+    text = type(text) == 'string' and text:match('^%s*(.-)%s*$') or ''
+    if text:find('|', 1, true) then return false end
+    conversation.alias = text ~= '' and text or nil
+    notify(self, 'alias', conversation.key)
+    return true
+end
+function Store:SetNotify(key, mode)
+    local conversation = self:Get(key); if not conversation then return false end
+    conversation.notify = mode == 'always' and 'always' or nil
+    notify(self, 'notify', conversation.key)
+    return true
+end
+function Store:SetKeep(key, value)
+    local conversation = self:Get(key); if not conversation then return false end
+    conversation.keep = value == true or nil
+    notify(self, 'keep', conversation.key)
+    return true
+end
+function Store:IndexOf(key, id)
+    local index = self._messageIndexes[tostring(key or '')]
+    return index and index[tostring(id or '')] or nil
+end
+
+-- What is known about a sender. One entry per person instead of a copy on every message.
+function Store:Person(name)
+    if type(name) ~= 'string' or name == '' then return nil end
+    return self.people[lower(name)]
+end
+function Store:SetPerson(name, fields)
+    if type(name) ~= 'string' or name == '' or name:find('|', 1, true) then return end
+    local key = lower(name)
+    local person = self.people[key]
+    if not person then
+        if self._peopleCount >= PEOPLE_LIMIT then return end
+        person = {}; self.people[key] = person; self._peopleCount = self._peopleCount + 1
+    end
+    for field, value in pairs(fields) do person[field] = value end
+end
+
+local function pushBounded(list, text, limit)
+    if list[#list] ~= text then list[#list + 1] = text end
+    while #list > limit do table.remove(list, 1) end
+end
+function Store:SentList(key)
+    if self.settings.inputHistoryScope == 'global' then return ensureTable(self.db, 'sent') end
+    local conversation = self:Get(key); if not conversation then return {} end
+    return ensureTable(conversation, 'sent')
+end
+function Store:AddSent(key, text)
+    if not self.settings.inputHistory or type(text) ~= 'string' or text == '' then return end
+    local limit = self.settings.inputHistoryScope == 'global' and SENT_GLOBAL or SENT_PER_CONVERSATION
+    pushBounded(self:SentList(key), text, limit)
+end
+function Store:SearchHistory() return ensureTable(self.db, 'searchHistory') end
+function Store:AddSearchHistory(text)
+    if not self.settings.searchHistoryEnabled or type(text) ~= 'string' or text == '' then return end
+    local list = self:SearchHistory()
+    for i = #list, 1, -1 do if list[i] == text then table.remove(list, i) end end
+    pushBounded(list, text, SEARCH_HISTORY)
+end
+
+-- Retention never runs unless the user sets a limit; the defaults keep everything.
+local function prunableCount(self, conversation, count, days)
+    if conversation.keep then return 0 end
+    local messages = conversation.messages
+    local total, cut = #messages, 0
+    if count > 0 and total > count then cut = total - count end
+    if days > 0 then
+        local now = self.now()
+        if isFiniteNumber(now) and now > 1000000000 then
+            local threshold = now - days * 86400
+            while cut < total and messageTime(messages[cut + 1]) < threshold do cut = cut + 1 end
+        end
+    end
+    return cut
+end
+local function removeOldest(self, conversation, cut)
+    if cut <= 0 then return end
+    local kept = {}
+    for i = cut + 1, #conversation.messages do kept[#kept + 1] = conversation.messages[i] end
+    conversation.messages = kept
+    indexConversation(self, conversation)
+    notify(self, 'clear', conversation.key)
+end
+-- Called for each new message, so a small overshoot is allowed: the array is rebuilt in batches.
+function Store:Prune(conversation)
+    local count = self.settings.retentionCount
+    if count <= 0 or conversation.keep then return end
+    if #conversation.messages <= count + math.max(20, math.floor(count * .05)) then return end
+    removeOldest(self, conversation, prunableCount(self, conversation, count, self.settings.retentionDays))
+end
+function Store:PruneAll()
+    for _, conversation in pairs(self.conversations) do
+        removeOldest(self, conversation, prunableCount(self, conversation, self.settings.retentionCount, self.settings.retentionDays))
+    end
+end
+function Store:CountPrunable(count, days)
+    local total = 0
+    for _, conversation in pairs(self.conversations) do total = total + prunableCount(self, conversation, count, days) end
+    return total
+end
+function Store:Stats()
+    local conversations, messages, bytes = 0, 0, 0
+    for _, conversation in pairs(self.conversations) do
+        conversations = conversations + 1
+        messages = messages + #conversation.messages
+        for _, message in ipairs(conversation.messages) do bytes = bytes + #tostring(message.text or '') end
+    end
+    return conversations, messages, bytes
+end
+
 function Store:Clear(key)
     local conversation = self:Get(key); if not conversation then return false end
     conversation.messages = {}; conversation.unread = 0; self._messageIndexes[conversation.key] = {}
@@ -357,13 +535,19 @@ function Store:Search(conversation, query)
     return nil
 end
 
-function Store:List(query)
-    query = lower(Store.Plain(query))
+-- messageHits (optional) is a table of conversation keys already known to contain the query, so
+-- that a list refresh never scans all messages again. Without it the messages are scanned here.
+function Store:List(query, messageHits)
+    query = Store.Fold(Store.Plain(query))
     local results = {}
     for _, conversation in pairs(self.conversations) do
-        local matches = query == '' or string.find(lower(Store.Plain(conversation.name)), query, 1, true)
-            or string.find(lower(Store.Plain(conversation.target)), query, 1, true)
-        if query ~= '' and not matches then matches = self:Search(conversation, query) ~= nil end
+        local matches = query == '' or string.find(Store.Fold(Store.Plain(conversation.name)), query, 1, true)
+            or string.find(Store.Fold(Store.Plain(conversation.target)), query, 1, true)
+            or string.find(Store.Fold(conversation.alias), query, 1, true)
+        if query ~= '' and not matches then
+            if messageHits then matches = messageHits[conversation.key] ~= nil
+            else matches = self:Search(conversation, query) ~= nil end
+        end
         if (query ~= '' or not conversation.closed) and matches then results[#results + 1] = conversation end
     end
     table.sort(results, function(a, b)

@@ -34,6 +34,7 @@ function Z.Now()return Z.Call(GetServerTime)or Z.Call(time)or 0 end
 function Z.Clock()return Z.Call(GetTime)or 0 end
 function Z.Plain(text)
     if not Z.Safe(text)or type(text)~='string'then return''end
+    if not text:find('|',1,true)then return text end -- most messages have no markup at all
     return text:gsub('|c%x%x%x%x%x%x%x%x',''):gsub('|r',''):gsub('|H.-|h(.-)|h','%1'):gsub('|T.-|t',''):gsub('|A.-|a',''):gsub('|K.-|k',''):gsub('||','|')
 end
 -- The native chat link handlers own the player menu and its available actions.
@@ -67,7 +68,7 @@ function Z.PlayerLink(c,msg,label)
 end
 function Z.IsVisibleAtEnd(key)
     local u=Z.UI
-    return u and u.frame and u.frame:IsShown()and not u.settingsPanel:IsShown()and Z.store.db.ui.selected==key and u.atEnd==true or false
+    return u and u.frame and u.frame:IsShown()and not u.settingsPanel:IsShown()and not(u.searchPanel and u.searchPanel:IsShown())and Z.store.db.ui.selected==key and u.atEnd==true or false
 end
 function Z.Changed(reason,key)
     if Z.UI and Z.UI.RequestRefresh then Z.UI.RequestRefresh(reason,key)end

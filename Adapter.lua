@@ -10,7 +10,7 @@ A.events={'PLAYER_ENTERING_WORLD','PLAYER_GUILD_UPDATE','GROUP_ROSTER_UPDATE','C
  'BN_FRIEND_INFO_CHANGED','BN_FRIEND_ACCOUNT_ONLINE','BN_FRIEND_ACCOUNT_OFFLINE',
  'CHAT_MSG_WHISPER','CHAT_MSG_WHISPER_INFORM','CHAT_MSG_BN_WHISPER','CHAT_MSG_BN_WHISPER_INFORM',
  'CHAT_MSG_GUILD','CHAT_MSG_OFFICER','CHAT_MSG_PARTY','CHAT_MSG_PARTY_LEADER','CHAT_MSG_RAID','CHAT_MSG_RAID_LEADER',
- 'CHAT_MSG_INSTANCE_CHAT','CHAT_MSG_INSTANCE_CHAT_LEADER','CHAT_MSG_CHANNEL','CHAT_MSG_SYSTEM',
+ 'CHAT_MSG_INSTANCE_CHAT','CHAT_MSG_INSTANCE_CHAT_LEADER','CHAT_MSG_RAID_WARNING','CHAT_MSG_CHANNEL','CHAT_MSG_SYSTEM',
  'CHAT_MSG_BN_WHISPER_PLAYER_OFFLINE','CHAT_MSG_RESTRICTED','CHAT_MSG_CHANNEL_NOTICE_USER'}
 function A:Safe(...)
  for i=1,select('#',...)do local v=select(i,...)
@@ -109,8 +109,16 @@ function A:JoinedChannels()
  local r={}
  -- GetChannelList has a variable return count, unlike ordinary adapter calls.
  if type(self.api.GetChannelList)=='function'then local raw={pcall(self.api.GetChannelList)};if raw[1]then table.remove(raw,1);r=raw end end
- local result={};for i=1,#r,3 do local id,name=r[i],self:Text(r[i+1]);if self:Safe(id)and type(id)=='number'and id>0 and name then result[#result+1]={id=id,name=name,selected=self.store.settings.enabledChannels[name:lower()]==true}end end
+ local result={};local numbers={}
+ for i=1,#r,3 do local id,name=r[i],self:Text(r[i+1]);if self:Safe(id)and type(id)=='number'and id>0 and name then numbers[name:lower()]=id;result[#result+1]={id=id,name=name,selected=self.store.settings.enabledChannels[name:lower()]==true}end end
+ self.channelNumbers=numbers
  return result
+end
+-- The current number of a joined channel. Numbers change when channels are reordered.
+function A:ChannelNumber(name)
+ name=self:Text(name);if not name then return nil end
+ if not self.channelNumbers then self:JoinedChannels()end
+ return self.channelNumbers and self.channelNumbers[name:lower()]
 end
 function A:SetChannel(name,enabled)
  name=self:Text(name);if not name or name==''then return false end
@@ -203,6 +211,9 @@ function A:OnEvent(event,...)
  local kind=event:match('^CHAT_MSG_(.+)$');if not kind then return end
  local inform=kind=='WHISPER_INFORM'or kind=='BN_WHISPER_INFORM'
  kind=kind:gsub('_INFORM$',''):gsub('_LEADER$','')
+ -- A raid warning belongs to the group it was sent in; it has no conversation of its own.
+ local raidWarning=kind=='RAID_WARNING'
+ if raidWarning then kind=self.groupKind;if not kind then return end end
  if not(labels[kind]or kind=='WHISPER'or kind=='BN_WHISPER'or kind=='CHANNEL')then return end
  local text,sender=self:Text(args[1]),self:Text(args[2]);if not text or not sender then return end
  local c
@@ -216,14 +227,19 @@ function A:OnEvent(event,...)
  local guid=self:Text(args[12]);local outgoing=inform or guid and guid==self.me.guid or sender==self.me.name
  local senderClass
  if not outgoing and guid and guid:match('^Player%-')then
-  local _,class=self:Call(self.api.GetPlayerInfoByGUID,guid);senderClass=self:Text(class)
+  local localClass,class,localRace,race,sex=self:Call(self.api.GetPlayerInfoByGUID,guid);senderClass=self:Text(class)
   if senderClass==''then senderClass=nil end
-  if senderClass then c.classFile=senderClass end
+  -- Only a direct conversation has one person: a group must not take on the class of its last speaker.
+  if senderClass and c.kind=='WHISPER'then c.classFile=senderClass end
+  race=self:Text(race)
+  if senderClass then
+   self.store:SetPerson(sender,{class=senderClass,className=self:Text(localClass),race=race~=''and race or nil,raceName=self:Text(localRace),sex=self:Safe(sex)and type(sex)=='number'and sex or nil})
+  end
  end
  if outgoing then self:Confirm(c,text)end
  self.serial=self.serial+1;local line=self:Safe(args[11])and args[11]
  local id=line and line~=0 and'chat:'..self:Scope()..':'..self.session..':'..tostring(line)or'local:'..self.session..':'..self.serial
- local row={id=id,at=now(),sender=outgoing and self.me.name or sender,text=text,outgoing=outgoing==true,ownCharacter=outgoing and self.me.name or nil,senderClass=outgoing and self.me.classFile or senderClass}
+ local row={id=id,at=now(),sender=outgoing and self.me.name or sender,text=text,outgoing=outgoing==true,ownCharacter=outgoing and self.me.name or nil,senderClass=outgoing and self.me.classFile or senderClass,raidWarning=raidWarning or nil}
  local msg,added=self.store:Append(c,row,Z.IsVisibleAtEnd and Z.IsVisibleAtEnd(c.key)or false)
  return c,msg,added
 end
