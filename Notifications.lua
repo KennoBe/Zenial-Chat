@@ -27,10 +27,7 @@ function N.Incoming(conv,message,added)
     end
     if Z.store.settings.autoOpen and(conv.kind=='WHISPER'or conv.kind=='BN_WHISPER')then
         -- Opening is explicitly opt-in; never change an already visible chat, steal focus or open in combat.
-        if not inCombat()and(not Z.UI.frame or not Z.UI.frame:IsShown())then
-            local focus=Z.store.settings.focusOnOpen;Z.store.settings.focusOnOpen=false
-            Z.UI.Open();Z.store.settings.focusOnOpen=focus
-        end
+        if not inCombat()and(not Z.UI.frame or not Z.UI.frame:IsShown())then Z.UI.Select(conv.key)end
     end
 end
 N.DEFAULT_POS={point='TOPRIGHT',relPoint='TOPRIGHT',x=-28,y=-140}
