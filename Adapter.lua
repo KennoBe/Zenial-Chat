@@ -42,6 +42,10 @@ function A:FullName(name,realm)
  return name
 end
 function A:Scope()return(self.me.realm or'?')..':'..(self.me.faction or'?')end
+local function unusedGuildConversation(c)
+ return c and next(c.messages)==nil and c.draft==''and c.unread==0 and c.last==0
+  and not(c.pinned or c.muted or c.alias or c.notify or c.keep)and(not c.sent or next(c.sent)==nil)
+end
 function A:RefreshIdentity()
  local p=self.api
  local _,_,_,build=self:Call(p.GetBuildInfo)
@@ -58,8 +62,28 @@ function A:RefreshIdentity()
  self.me={name=self:FullName(name,realm),realm=realm,faction=self:Text(self:Call(p.UnitFactionGroup,'player')),guid=self:Text(self:Call(p.UnitGUID,'player')),classFile=self:Text(class)}
  local guild,_,_,guildRealm=self:Call(p.GetGuildInfo,'player');guild=self:Text(guild)
  local club=self:Call(p.C_Club and p.C_Club.GetGuildClubId)
- self.guildScope=guild and((self:Safe(club)and club and'club:'..tostring(club))or (self:Text(guildRealm)or realm or'?')..':'..guild)or nil
- for _,kind in ipairs({'GUILD','OFFICER'})do if self.guildScope then self.store:Ensure({kind=kind,name=label(kind),scope=self.guildScope})end end
+ local fallback=guild and(self:Text(guildRealm)or realm or'?')..':'..guild
+ local known=type(self.store.db.guildScopes)=='table'and self.store.db.guildScopes
+ self.guildScope=nil
+ if fallback then
+  if self:Safe(club)and club then
+   self.guildScope='club:'..tostring(club)
+   -- Both native identifiers are known together; reuse that proven link across reloads.
+   if not known then known={};self.store.db.guildScopes=known end
+   known[fallback]=self.guildScope
+  else self.guildScope=known and type(known[fallback])=='string'and known[fallback]or fallback end
+  for _,kind in ipairs({'GUILD','OFFICER'})do
+   local canonical=self.store:Ensure({kind=kind,name=label(kind),scope=self.guildScope})
+   if fallback~=self.guildScope then
+    local previous=self.store:Get(Z.Store.Key({kind=kind,scope=fallback}))
+    -- Keep every archive and individual choice; only hide completely unused duplicates.
+    if unusedGuildConversation(previous)then
+     self.store:SetClosed(previous.key,true)
+     if self.store.ui.selected==previous.key then self.store:Select(canonical.key)end
+    end
+   end
+  end
+ end
  local instance=p.LE_PARTY_CATEGORY_INSTANCE or 2
  local inInstance=self:Call(p.IsInGroup,instance)==true
  local category=inInstance and instance or p.LE_PARTY_CATEGORY_HOME or 1

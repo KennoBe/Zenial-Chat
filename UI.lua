@@ -9,6 +9,13 @@ function U.Notice(message)
 end
 function U.RequestRefresh(reason,key)
     U.dirty=true
+    if reason=='selection'and key and U.input and U.loadedKey~=key then
+        local c=Z.store:Get(key)
+        if c then
+            U.historyPos=nil;U.historyDraft=nil;U.historyValue=nil
+            U.loadingDraft=true;U.input:SetText(c.draft or'');U.loadingDraft=false;U.loadedKey=key
+        end
+    end
     if reason=='message'or reason=='clear'or reason=='clear-all'then
         if not key or Z.store and key==Z.store.db.ui.selected then U.indexDirty=true end
         U.lastActivity=Z.Clock()
