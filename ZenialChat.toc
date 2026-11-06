@@ -3,7 +3,7 @@
 ## Notes: Native messenger with conversations, shared history and community channels
 ## Notes-deDE: Nativer Messenger mit Gesprächen, gemeinsamem Verlauf und Community-Kanälen
 ## Author: ZENIAL contributors
-## Version: 0.1.2
+## Version: 0.1.3
 ## SavedVariables: ZenialChatDB, ZenialMinimapDB
 ## OptionalDeps: ZenialCommunity
 ## IconTexture: Interface\AddOns\ZenialChat\Media\Icon.tga
