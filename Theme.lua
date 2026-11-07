@@ -24,9 +24,18 @@ T.icons={COMMUNITY='Interface\\GossipFrame\\GossipGossipIcon',GUILD='Interface\\
 T.fontFaces={friz='Fonts\\FRIZQT__.TTF',arial='Fonts\\ARIALN.TTF',morpheus='Fonts\\MORPHEUS.TTF',skurri='Fonts\\SKURRI.TTF'}
 T.backgrounds={}
 function T.Color(key)return unpack(T.colors[key]or T.colors.text)end
+-- FontString/EditBox:SetFont reports failure as false as well as throwing.
+local function tryFont(f,face,size,flags)
+    local ok,applied=pcall(f.SetFont,f,face,size,flags)
+    return ok and applied==true
+end
+local function setFont(f,face,size,flags)
+    if not tryFont(f,face,size,flags)and not tryFont(f,'Fonts\\ARIALN.TTF',size,'')then
+        f:SetFontObject(GameFontHighlight)
+    end
+end
 function T.Font(f,size,bold,color)
-    local ok=pcall(f.SetFont,f,bold and T.bold or T.font,size or 14,'')
-    if not ok then f:SetFont('Fonts\\ARIALN.TTF',size or 14,'')end
+    setFont(f,bold and T.bold or T.font,size or 14,'')
     f:SetTextColor(T.Color(color or'text'));f:SetJustifyH('LEFT');f:SetJustifyV('TOP')
     if f.SetShadowOffset then f:SetShadowOffset(0,-1);f:SetShadowColor(0,0,0,.45)end
 end
@@ -36,8 +45,9 @@ function T.MessageFont(f,size,bold,color)
     local s=Z.store.settings;local face=T.fontFaces[s.fontFace]
     local flags=s.fontOutline~='none'and s.fontOutline or''
     if face or flags~=''then
-        local ok=pcall(f.SetFont,f,face or(bold and T.bold or T.font),size or 14,flags)
-        if not ok then pcall(f.SetFont,f,bold and T.bold or T.font,size or 14,'')end
+        if not tryFont(f,face or(bold and T.bold or T.font),size or 14,flags)then
+            setFont(f,bold and T.bold or T.font,size or 14,'')
+        end
     end
     if f.SetSpacing then f:SetSpacing(s.lineSpacing or 0)end
 end
@@ -71,11 +81,20 @@ function T.Button(parent,label,fn,style)
     f:SetScript('OnLeave',function()if GameTooltip then GameTooltip:Hide()end end)
     return f
 end
+-- SetAtlas has no success return on Forever. Check availability when possible;
+-- nil is a normal result, while an explicit false or an error needs a fallback.
+local function setAtlas(texture,atlas)
+    if not atlas or not texture.SetAtlas then return false end
+    if C_Texture and C_Texture.GetAtlasInfo and not Z.Call(C_Texture.GetAtlasInfo,atlas)then return false end
+    local ok,applied=pcall(texture.SetAtlas,texture,atlas,false)
+    return ok and applied~=false
+end
 function T.ButtonIcon(button,texture,atlas,size)
     if not button.symbol then button.symbol=button:CreateTexture(nil,'ARTWORK')end
     button.symbol:ClearAllPoints();button.symbol:SetPoint('CENTER');button.symbol:SetSize(size or 19,size or 19)
-    button.symbol:SetTexture(texture)
-    if atlas and button.symbol.SetAtlas then pcall(button.symbol.SetAtlas,button.symbol,atlas,false)end
+    if not setAtlas(button.symbol,atlas)then
+        button.symbol:SetTexture(texture);button.symbol:SetTexCoord(0,1,0,1)
+    end
     button.label:SetText('');return button.symbol
 end
 function T.NameColor(font,classFile)
@@ -100,7 +119,7 @@ function T.Tooltip(owner,title,detail)
 end
 function T.Input(parent)
     local bg=T.Frame(parent,'field','border');bg.opacityMultiplier=.95;local f=CreateFrame('EditBox',nil,bg)
-    f:SetAutoFocus(false);f:SetTextInsets(10,10,6,6);f:SetFont(T.font,14,'');f:SetTextColor(T.Color('text'))
+    f:SetAutoFocus(false);f:SetTextInsets(10,10,6,6);setFont(f,T.font,14,'');f:SetTextColor(T.Color('text'))
     f:SetAlpha(1);f.background=bg;f:SetPoint('TOPLEFT',bg,'TOPLEFT',2,-2);f:SetPoint('BOTTOMRIGHT',bg,'BOTTOMRIGHT',-2,2)
     return f,bg
 end
@@ -113,13 +132,10 @@ function T.Icon(parent,conversation)
 end
 function T.SetIcon(icon,c)
     local coords=c.classFile and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[c.classFile]
+    if c.classFile and setAtlas(icon.texture,'groupfinder-icon-class-'..c.classFile:lower())then return end
     icon.texture:SetTexCoord(0,1,0,1)
-    if c.classFile and icon.texture.SetAtlas then
-        local ok=pcall(icon.texture.SetAtlas,icon.texture,'groupfinder-icon-class-'..c.classFile:lower(),false)
-        if ok then return end
-    end
     if coords then icon.texture:SetTexture('Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES');icon.texture:SetTexCoord(unpack(coords))
-    else icon.texture:SetTexture(T.icons[c.kind]or'Interface\\Icons\\INV_Misc_GroupLooking')end
+    else icon.texture:SetTexture(T.icons[c.slot]or T.icons[c.kind]or'Interface\\Icons\\INV_Misc_GroupLooking')end
 end
 local CLASS_TEXTURE='Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES'
 -- The atlas of a known race, if this client really has it. Unknown means no race icon, never a guess.
@@ -138,7 +154,7 @@ function T.SetSenderIcon(icon,s,conv,class,person)
         local atlas=raceAtlas(s,person)
         if atlas then
             icon.texture:SetTexCoord(0,1,0,1)
-            if pcall(icon.texture.SetAtlas,icon.texture,atlas,false)then return end
+            if setAtlas(icon.texture,atlas)then return end
         end
     end
     T.SetIcon(icon,{kind=conv.kind,classFile=class})
