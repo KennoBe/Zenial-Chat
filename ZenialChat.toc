@@ -13,11 +13,14 @@ Format.lua
 Search.lua
 Layout.lua
 Adapter.lua
+NativeChat.lua
+NativeChatUnread.lua
 Theme.lua
 Transcript.lua
 UI.lua
 SearchUI.lua
 Options.lua
+NativeChatOptions.lua
 Notifications.lua
 Main.lua
 Bindings.xml

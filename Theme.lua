@@ -19,7 +19,7 @@ T.icons={COMMUNITY='Interface\\GossipFrame\\GossipGossipIcon',GUILD='Interface\\
     horde='Interface\\Icons\\INV_BannerPVP_01',alliance='Interface\\Icons\\INV_BannerPVP_02',
     appearance='Interface\\Icons\\Trade_Engineering',behavior='Interface\\Icons\\INV_Misc_Gear_01',
     notifications='Interface\\Icons\\INV_Misc_Bell_01',history='Interface\\Icons\\INV_Misc_Book_09',
-    messages='Interface\\Icons\\INV_Letter_15'}
+    messages='Interface\\Icons\\INV_Letter_15',blizzard='Interface\\WorldMap\\GEAR_64GREY'}
 -- Client fonts for the message text. The interface itself keeps Noto Sans.
 T.fontFaces={friz='Fonts\\FRIZQT__.TTF',arial='Fonts\\ARIALN.TTF',morpheus='Fonts\\MORPHEUS.TTF',skurri='Fonts\\SKURRI.TTF'}
 T.backgrounds={}

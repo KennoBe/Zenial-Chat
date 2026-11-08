@@ -1,6 +1,6 @@
 local _,Z=...
 local U=Z.UI
-local pages={{'appearance','Darstellung','Appearance'},{'messages','Nachrichten','Messages'},{'behavior','Verhalten','Behavior'},{'notifications','Benachrichtigungen','Notifications'},{'history','Verlauf & Daten','History & data'}}
+local pages={{'appearance','Darstellung','Appearance'},{'messages','Nachrichten','Messages'},{'behavior','Verhalten','Behavior'},{'notifications','Benachrichtigungen','Notifications'},{'history','Verlauf & Daten','History & data'},{'blizzard','Blizzard Chat','Blizzard Chat'}}
 local function add(kind,label,options)
     local row=options or{};row.kind=kind;row.label=label;U.optionSpecs[#U.optionSpecs+1]=row;return row
 end
@@ -29,7 +29,8 @@ local function soundChoices()
 end
 local function buildSpecs()
     local s=Z.store.settings;U.optionSpecs={}
-    if U.settingsPage=='appearance'then
+    if U.settingsPage=='blizzard'then Z.NativeChatOptions.Add(add)
+    elseif U.settingsPage=='appearance'then
         add('section',Z.L('Darstellung','Appearance'))
         add('slider',Z.L('Hintergrund aktiv','Active background'),{key='alphaActive',min=0,max=1,step=.01,format=function(v)return math.floor(v*100+.5)..' %'end})
         add('slider',Z.L('Hintergrund inaktiv','Inactive background'),{key='alphaInactive',min=0,max=1,step=.01,format=function(v)return math.floor(v*100+.5)..' %'end})
@@ -200,11 +201,14 @@ function U.LayoutOptions()
     T.Place(U.optionsTitle,18,12,math.max(70,w-180),34,panel)
     T.Place(U.settingsScroll,16,66,w-38,h-109,panel);U.settingsContent:SetWidth(w-48)
     T.Place(U.optionsFooter,18,h-29,w-36,20,panel)
+    U.optionsFooter:SetText(U.settingsPage=='blizzard'and Z.L('Änderungen erst nach Vorschau bestätigen.','Confirm changes after preview.')or Z.L('Änderungen werden sofort gespeichert.','Changes are saved immediately.'))
     T.Place(U.optionsScrollbar,w-15,67,8,h-111,panel)
     local navWidth=U.settingsNav:GetWidth();local compact=U.metrics.iconOnly
+    local navStep=math.min(58,(U.settingsNav:GetHeight()-24)/#pages);local tabHeight=navStep-6
     for i,entry in ipairs(pages)do
-        local b=U.optionTabs[i];T.Place(b,6,12+(i-1)*58,navWidth-12,52,U.settingsNav)
-        T.Place(b.icon,7,8,34,34,b);T.Place(b.caption,50,16,math.max(1,navWidth-70),26,b)
+        local b=U.optionTabs[i];T.Place(b,6,12+(i-1)*navStep,navWidth-12,tabHeight,U.settingsNav)
+        local iconSize=math.min(34,tabHeight-8)
+        T.Place(b.icon,7,navStep==58 and 8 or(tabHeight-iconSize)/2,iconSize,iconSize,b);T.Place(b.caption,50,navStep==58 and 16 or(tabHeight-26)/2,math.max(1,navWidth-70),26,b)
         b.caption:SetShown(not compact);b.zenialBackgroundKind=entry[1]==U.settingsPage and'selected'or'sidebar'
         local c=T.colors[b.zenialBackgroundKind];b:SetBackdropColor(c[1],c[2],c[3],U.currentAlpha or.94)
     end
