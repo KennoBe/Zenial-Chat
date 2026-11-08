@@ -11,6 +11,25 @@ local definitions={
 N.definitions=definitions
 local noise={LOOT=true,MONEY=true,CURRENCY=true,COMBAT_XP_GAIN=true,COMBAT_HONOR_GAIN=true,COMBAT_FACTION_CHANGE=true,SKILL=true,OPENING=true,TRADESKILLS=true,COMBAT_MISC_INFO=true,COLLECTED_APPEARANCE=true}
 local critical={SYSTEM=true,ERRORS=true,IGNORED=true,MONSTER_BOSS_EMOTE=true,MONSTER_BOSS_WHISPER=true}
+-- Readable names for the preview; unknown native groups fall back to their key.
+local labels={
+    SAY={'Sagen','Say'},YELL={'Schreien','Yell'},EMOTE={'Emotes','Emotes'},CHANNEL={'Öffentliche Kanäle','Public channels'},
+    SYSTEM={'Systemmeldungen','System messages'},ERRORS={'Fehlermeldungen','Errors'},IGNORED={'Ignoriert-Hinweise','Ignore notices'},
+    GUILD={'Gilde','Guild'},OFFICER={'Offiziere','Officers'},GUILD_ACHIEVEMENT={'Gildenerfolge','Guild achievements'},
+    PARTY={'Gruppe','Party'},PARTY_LEADER={'Gruppenleiter','Party leader'},RAID={'Schlachtzug','Raid'},RAID_LEADER={'Schlachtzugsleiter','Raid leader'},
+    RAID_WARNING={'Schlachtzugswarnungen','Raid warnings'},INSTANCE_CHAT={'Instanz','Instance'},INSTANCE_CHAT_LEADER={'Instanzleiter','Instance leader'},
+    WHISPER={'Flüstern','Whispers'},BN_WHISPER={'Battle.net-Flüstern','Battle.net whispers'},BN_INLINE_TOAST_ALERT={'Battle.net-Hinweise','Battle.net alerts'},
+    LOOT={'Beute','Loot'},MONEY={'Geld','Money'},CURRENCY={'Währungen','Currency'},COMBAT_XP_GAIN={'Erfahrung','Experience'},
+    COMBAT_HONOR_GAIN={'Ehre','Honor'},COMBAT_FACTION_CHANGE={'Ruf','Reputation'},SKILL={'Fertigkeiten','Skills'},OPENING={'Öffnen','Opening'},
+    TRADESKILLS={'Berufe','Professions'},PET_INFO={'Begleiter','Pet info'},COMBAT_MISC_INFO={'Sonstige Kampfinfos','Misc. combat info'},
+    ACHIEVEMENT={'Erfolge','Achievements'},COLLECTED_APPEARANCE={'Gesammelte Vorlagen','Collected appearances'},
+    BG_HORDE={'Schlachtfeld (Horde)','Battleground (Horde)'},BG_ALLIANCE={'Schlachtfeld (Allianz)','Battleground (Alliance)'},BG_NEUTRAL={'Schlachtfeld (neutral)','Battleground (neutral)'},
+    MONSTER_SAY={'NPC-Sagen','NPC say'},MONSTER_YELL={'NPC-Schreien','NPC yell'},MONSTER_EMOTE={'NPC-Emotes','NPC emotes'},MONSTER_WHISPER={'NPC-Flüstern','NPC whispers'},
+    MONSTER_BOSS_EMOTE={'Boss-Emotes','Boss emotes'},MONSTER_BOSS_WHISPER={'Boss-Flüstern','Boss whispers'},
+}
+local function label(g)local l=labels[g];return l and Z.L(l[1],l[2])or g end
+local function labelList(groups)local out={};for i,g in ipairs(groups)do out[i]=label(g)end;return table.concat(out,', ')end
+local function heading(text)return'|cffffd200'..text..'|r'end
 local function copy(value)
     if type(value)~='table'then return value end
     local out={};for k,v in pairs(value)do out[k]=copy(v)end;return out
@@ -84,11 +103,12 @@ local function snapshot()
     for id=1,maxWindows()do
         local f=_G['ChatFrame'..id]
         if f and not f.isTemporary then
-            local name,_,_,_,_,_,shown,_,docked=FCF_GetChatWindowInfo(id)
+            local name,size,_,_,_,_,shown,_,docked=FCF_GetChatWindowInfo(id)
             if not Z.Safe(name,shown,docked)or type(name)~='string'then error('Unreadable native chat window')end
             local active=FCF_IsChatWindowIndexActive(id)
             if not Z.Safe(active)or not(active==nil or active==false or active==true or active==1)then error('Unreadable native chat visibility')end
             out.windows[id]={id=id,name=name,active=active==true or active==1,docked=docked==true or docked==1,
+                fontSize=Z.Safe(size)and type(size)=='number'and size>0 and size or nil,
                 groups=list(f.messageTypeList),channels=list(f.channelList)}
         end
     end
@@ -181,7 +201,7 @@ function N.Preview(mode,options)
             p.rows[#p.rows+1]=Z.L('Tab-Aufteilung, Nachrichtengruppen und Kanäle bleiben unverändert.','Tab layout, message groups and channels remain unchanged.')
             p.cvars=desiredCvars(p.prefs)
         else
-            local used,selected={},{}
+            local used,selected,entries,roleTab={},{},{},{}
             for _,d in ipairs(definitions)do if p.prefs.include[d.key]then selected[d.key]=true end end
             local public=selected.general and publicChannels()or{}
             for _,d in ipairs(definitions)do if selected[d.key]then
@@ -202,6 +222,8 @@ function N.Preview(mode,options)
                 local rename=create
                 for _,alias in ipairs(d.aliases)do if current.name==alias then rename=true end end
                 if rename then target.name=Z.L(d.de,d.en)end
+                -- New tabs inherit the font size of General when it is readable.
+                if create and before.windows[1]and before.windows[1].fontSize then target.fontSize=before.windows[1].fontSize end
                 target.groups=create and{}or copy(current.groups);target.channels=create and{}or copy(current.channels)
                 local remove={}
                 for _,other in ipairs(definitions)do if other.key~=d.key and selected[other.key]then
@@ -223,21 +245,59 @@ function N.Preview(mode,options)
                 local add,del={},{}
                 for _,g in ipairs(target.groups)do if not contains(current.groups,g)then add[#add+1]=g end end
                 for _,g in ipairs(current.groups)do if not contains(target.groups,g)then del[#del+1]=g end end
-                p.rows[#p.rows+1]=string.format('%s (#%d) → %s%s\n  + %s\n  − %s\n  %s: %s',current.name~=''and current.name or Z.L('frei','free'),id,target.name,create and Z.L(' (neu)',' (new)')or'',#add>0 and table.concat(add,', ')or'—',#del>0 and table.concat(del,', ')or'—',Z.L('Kanäle danach','Channels afterwards'),#target.channels>0 and table.concat(target.channels,', ')or'—')
+                entries[#entries+1]={def=d,current=current,target=target,create=create,added=add,removed=del};roleTab[d.key]=target
             end end
             if next(p.targets)==nil then error(Z.L('Wähle mindestens einen Tab.','Select at least one tab.'))end
+            p.rows[#p.rows+1]=Z.L('So wird der Blizzard-Chat aufgeteilt. Bestehende Tabs behalten ihren Verlauf; verschoben werden nur die aufgeführten Nachrichtenarten.','This is how Blizzard chat will be split. Existing tabs keep their history; only the listed message types are moved.')
+            local generalName=before.windows[1]and before.windows[1].name or Z.L('Allgemein','General')
+            for _,e in ipairs(entries)do
+                local t,lines=e.target,{}
+                if e.create then lines[1]=heading(t.name..' · '..Z.L('neuer Tab','new tab'))
+                elseif e.current.name~=t.name then lines[1]=heading(t.name..' · '..string.format(Z.L('bestehender Tab, bisher "%s"','existing tab, previously "%s"'),e.current.name))
+                else lines[1]=heading(t.name..' · '..Z.L('bestehender Tab','existing tab'))end
+                if #e.added>0 then lines[#lines+1]='  '..(e.create and Z.L('Zeigt: ','Shows: ')or Z.L('Zeigt zusätzlich: ','Also shows: '))..labelList(e.added)end
+                -- Removed message types are grouped by the tab that receives them.
+                local order,byDest={},{}
+                for _,g in ipairs(e.removed)do
+                    local dest=''
+                    for _,other in ipairs(definitions)do if other.key~=e.def.key and roleTab[other.key]and contains(other.groups,g)then dest=roleTab[other.key].name;break end end
+                    if not byDest[dest]then byDest[dest]={};order[#order+1]=dest end
+                    table.insert(byDest[dest],g)
+                end
+                for _,dest in ipairs(order)do
+                    lines[#lines+1]='  '..(dest~=''and string.format(Z.L('Wandert nach %s: ','Moves to %s: '),dest)or Z.L('Nicht mehr angezeigt: ','No longer shown: '))..labelList(byDest[dest])
+                end
+                if #e.added==0 and #e.removed==0 then lines[#lines+1]='  '..Z.L('Nachrichtenarten bleiben unverändert.','Message types stay unchanged.')end
+                if #t.channels>0 then lines[#lines+1]='  '..Z.L('Kanäle: ','Channels: ')..table.concat(t.channels,', ')end
+                if e.create and t.fontSize then lines[#lines+1]='  '..string.format(Z.L('Schriftgröße %d wie %s','Font size %d, same as %s'),t.fontSize,generalName)end
+                p.rows[#p.rows+1]=table.concat(lines,'\n')
+            end
             p.cvars=desiredCvars(p.prefs)
         end
+        local cvarNames={showTimestamps=Z.L('Zeitstempel','Timestamps'),chatClassColorOverride=Z.L('Klassenfarben für Namen','Class colors for names')}
+        local cvarValues={showTimestamps={none=Z.L('Aus','Off'),['%H:%M']='HH:MM',['%H:%M:%S']='HH:MM:SS'},
+            chatClassColorOverride={['0']=Z.L('An','On'),['1']=Z.L('Aus','Off'),['2']=Z.L('je Kanal','per channel')}}
+        local function cvarValue(key,value)return cvarValues[key]and cvarValues[key][value]or tostring(value)end
+        local function yes(value)return value and Z.L('ja','yes')or Z.L('nein','no')end
+        local display={heading(Z.L('Darstellung & Zähler','Appearance & counters'))}
         for key in pairs(p.cvars)do
             if not C_CVar or not C_CVar.SetCVar or before.cvars[key]==nil then error('Native CVar unavailable: '..key)end
-            p.rows[#p.rows+1]=key..': '..tostring(before.cvars[key])..' → '..p.cvars[key]
+            display[#display+1]='  '..string.format(Z.L('%s: bisher %s, danach %s (gesamter Blizzard-Chat)','%s: currently %s, then %s (all Blizzard chat)'),cvarNames[key]or key,cvarValue(key,before.cvars[key]),cvarValue(key,p.cvars[key]))
         end
-        p.rows[#p.rows+1]=Z.L('SYSTEM bleibt als Auffanggruppe in Allgemein. Questmeldungen können dort weiterhin erscheinen.','SYSTEM remains in General as a safety net. Quest messages may still appear there.')
-        p.rows[#p.rows+1]=Z.L('Zähler und Darstellung gelten für die unten ausgewählten nativen Tabs; keine Änderung am ZENIAL-Messenger. Chatverlauf wird nicht gesichert.','Counters and appearance affect the selected native tabs; the ZENIAL messenger is unchanged. Chat history is not backed up.')
-        for id,w in pairs(before.windows)do if w.active and eligible(id,before)then
-            p.rows[#p.rows+1]=string.format('#%d %s · %s',id,w.name,p.prefs.unread and p.prefs.unreadTabs[tostring(id)]~=false and Z.L('Zähler an','counter on')or Z.L('Zähler aus','counter off'))
+        local on,off={},{}
+        for id=1,maxWindows()do local w=before.windows[id];if w and w.active and eligible(id,before)then
+            local target=p.prefs.unread and p.prefs.unreadTabs[tostring(id)]~=false and on or off;target[#target+1]=w.name
         end end
-        p.rows[#p.rows+1]=string.format('%s: %s · %s: %s · %s: %s',Z.L('Kompakte Tabs','Compact tabs'),tostring(p.prefs.compactTabs),Z.L('Buttons ausblenden','Hide buttons'),tostring(p.prefs.hideButtons),Z.L('Hintergründe ausblenden','Hide backgrounds'),tostring(p.prefs.hideBackground))
+        if p.prefs.unread then
+            display[#display+1]='  '..Z.L('Ungelesen-Zähler an: ','Unread counters on: ')..(#on>0 and table.concat(on,', ')or'—')
+            if #off>0 then display[#display+1]='  '..Z.L('Ungelesen-Zähler aus: ','Unread counters off: ')..table.concat(off,', ')end
+        else display[#display+1]='  '..Z.L('Ungelesen-Zähler: aus','Unread counters: off')end
+        display[#display+1]='  '..string.format(Z.L('Kompakte Tab-Schrift: %s · Zusätzliche Buttons ausblenden: %s · Hintergründe ausblenden: %s','Compact tab text: %s · Hide extra buttons: %s · Hide backgrounds: %s'),yes(p.prefs.compactTabs),yes(p.prefs.hideButtons),yes(p.prefs.hideBackground))
+        p.rows[#p.rows+1]=table.concat(display,'\n')
+        if p.mode=='setup'then
+            p.rows[#p.rows+1]=Z.L('Hinweis: Systemmeldungen (SYSTEM) und Fehler bleiben zusätzlich in Allgemein, damit nichts Wichtiges verloren geht. Questmeldungen können dort weiterhin erscheinen.','Note: system messages (SYSTEM) and errors also stay in General so nothing important is lost. Quest messages may still appear there.')
+        end
+        p.rows[#p.rows+1]=Z.L('Der ZENIAL-Messenger bleibt unverändert. Chatverlauf ist nicht Teil der Sicherung.','The ZENIAL messenger is unchanged. Chat history is not part of the backup.')
         return p
     end)
     if ok then return plan end
@@ -253,6 +313,8 @@ local function applyWindow(w)
         local opened=invoke(FCF_OpenNewWindow,w.name,true)
         if opened~=f then error('Native window allocation changed; preview again')end
     end
+    -- Optional cosmetic step: a missing or failing font API never blocks routing.
+    if w.create and w.fontSize and type(FCF_SetChatWindowFontSize)=='function'then pcall(FCF_SetChatWindowFontSize,nil,f,w.fontSize)end
     if not w.active then invoke(FCF_Close,f)end
     local name=FCF_GetChatWindowInfo(w.id)
     if name~=w.name then invoke(FCF_SetWindowName,f,w.name)end
@@ -340,8 +402,16 @@ function N.RefreshAppearance()
             local v=N.visuals[id]
             if not v then v={regions={}};N.visuals[id]=v end
             if tab.Text and tab.Text.GetFontObject then
-                if prefs.compactTabs and not v.font then v.font=tab.Text:GetFontObject();tab.Text:SetFontObject(GameFontHighlightSmall)
-                elseif not prefs.compactTabs and v.font then tab.Text:SetFontObject(v.font);v.font=nil end
+                if prefs.compactTabs and not v.font then
+                    local file,size,flags=Z.Call(tab.Text.GetFont,tab.Text)
+                    if type(file)=='string'and type(size)=='number'and size>8 then
+                        v.font={object=tab.Text:GetFontObject(),file=file,size=size,flags=flags}
+                        pcall(tab.Text.SetFont,tab.Text,file,math.max(8,math.floor(size*.8+.5)),flags or'')
+                    end
+                elseif not prefs.compactTabs and v.font then
+                    if v.font.object then tab.Text:SetFontObject(v.font.object)end
+                    pcall(tab.Text.SetFont,tab.Text,v.font.file,v.font.size,v.font.flags or'');v.font=nil
+                end
             end
             for _,field in ipairs(CHAT_FRAME_TEXTURES or{'Background','ButtonFrameBackground'})do styleRegion(v.regions,field,f[field],prefs.hideBackground,false)end
             styleRegion(v.regions,'buttonFrame',f.buttonFrame,prefs.hideButtons,true)

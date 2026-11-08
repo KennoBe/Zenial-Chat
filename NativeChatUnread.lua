@@ -2,7 +2,6 @@ local _,Z=...
 local U={};Z.NativeChatUnread=U
 local states={};local globalHooks={}
 local prefs={unread=false,flash=false,unreadTabs={}}
-local PADDING=24
 local function safe(...)return Z.Safe(...)end
 local function call(fn,...)return Z.Call(fn,...)end
 local function allowedFrame(frame)
@@ -75,23 +74,12 @@ local function delivered(state,_,message,r,g,b,infoID,accessID,typeID,event,args
     if shown then reset(state);return end
     state.count=state.count+1;render(state,true)
 end
-local function reflow(state)
-    -- Avoid measuring names: whisper tab names can be secret. The native dock
-    -- update chooses its fixed-width path and honours sizePadding itself.
-    local docked=state.frame.isDocked
-    if not safe(docked)or docked then return end
-    local padding=state.tab.sizePadding
-    if not safe(padding)then return end
-    padding=padding or 0
-    local width=call(state.tab.GetWidth,state.tab)
-    if type(width)=='number'and width>20+padding and state.tab.Text then
-        state.tab.Text:SetWidth(width-20-padding)
-    end
-end
 local function decorate(state)
     if state.badge then return end
-    local badge=CreateFrame('Frame',nil,state.tab);badge:SetSize(18,16)
-    badge:SetPoint('RIGHT',state.tab,'RIGHT',-2,-5)
+    -- The badge floats over the upper tab corner instead of widening the tab
+    -- padding: docked tabs share a fixed width, so padding truncated names.
+    local badge=CreateFrame('Frame',nil,state.tab);badge:SetSize(18,13)
+    badge:SetPoint('TOPRIGHT',state.tab,'TOPRIGHT',-1,-1);badge:SetFrameLevel((state.tab:GetFrameLevel()or 0)+5)
     local bg=badge:CreateTexture(nil,'BACKGROUND');bg:SetAllPoints();bg:SetColorTexture(.8,.57,.13,.35)
     local text=badge:CreateFontString(nil,'OVERLAY','GameFontHighlightSmall');text:SetAllPoints()
     text:SetJustifyH('CENTER');text:SetJustifyV('MIDDLE');text:SetTextColor(1,.87,.5,1)
@@ -139,7 +127,6 @@ function U.Apply()
     end
     if inCombat()then return end
     if type(hooksecurefunc)~='function'then return end
-    local changed=false
     if prefs.unread then
         hookGlobal('FCFDock_SelectWindow',function(_,frame)local state=states[frame];if state and enabled(state)then reset(state)end end)
         hookGlobal('FCF_Close',function(frame,fallback)local state=states[fallback or frame];if state and enabled(state)then reset(state,true)end end)
@@ -153,25 +140,7 @@ function U.Apply()
         if allowedFrame(state.frame)and allowedFrame(state.tab)then
             local on=enabled(state)
             if on then decorate(state)else reset(state,true)end
-            local padding=state.tab.sizePadding
-            if safe(padding)then
-                local wasNil=padding==nil
-                padding=padding or 0
-                if type(padding)=='number'then
-                    if on and not state.padding then
-                        state.paddingWasNil=wasNil;state.tab.sizePadding=padding+PADDING;state.padding=true;changed=true;reflow(state)
-                    elseif not on and state.padding then
-                        -- Native lifecycle code may have replaced the whole field.
-                        -- In that case our contribution is already gone.
-                        local restored=padding>=PADDING and padding-PADDING or padding
-                        state.tab.sizePadding=restored
-                        if restored==0 and state.paddingWasNil then state.tab.sizePadding=nil end
-                        state.padding=false;changed=true;reflow(state)
-                    end
-                end
-            end
             render(state)
         end
     end
-    if changed and type(FCF_DockUpdate)=='function'then pcall(FCF_DockUpdate)end
 end
