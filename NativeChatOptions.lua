@@ -40,7 +40,7 @@ local function preview(mode)
     T.Place(f.status,18,height-98,width-36,44,f)
     f.status:SetText(plan and Z.L('Nur nach Bestätigung werden die aufgeführten Tabs und Optionen geändert. Bestehende eigene Tabs bleiben erhalten.','Only confirmation changes the listed tabs and options. Existing custom tabs are preserved.')or'')
     T.Place(f.cancel,18,height-44,150,30,f);T.Place(f.apply,width-208,height-44,190,30,f)
-    f.apply.label:SetText(mode=='restore'and Z.L('Wiederherstellen','Restore')or Z.L('Einrichtung übernehmen','Apply setup'))
+    f.apply.label:SetText(mode=='restore'and Z.L('Wiederherstellen','Restore')or mode=='display'and Z.L('Übernehmen','Apply')or Z.L('Einrichtung übernehmen','Apply setup'))
     f.apply:SetEnabled(plan~=nil);f:Show()
 end
 O.Preview=preview
@@ -81,6 +81,8 @@ function O.Add(add)
     add('choice',Z.L('Klassenfarben für Namen','Class colors for names'),{get=function()return options().classColors end,set=function(v)options().classColors=v end,
         choices={{'keep',Z.L('Unverändert','Keep current')},{'on',Z.L('An','On')},{'off',Z.L('Aus','Off')}}})
     add('note',Z.L('Zeitstempel und Klassenfarben verwenden native Einstellungen und gelten für den gesamten Blizzard-Chat. Eine native Option für kürzere Kanalpräfixe ist auf Forever nicht belegt; die Formate bleiben unverändert.','Timestamps and class colors use native settings and affect all Blizzard chat. A native shorter-channel-prefix option is not verified on Forever, so formats remain unchanged.'))
+    add('action',Z.L('Nur Zähler & Darstellung übernehmen …','Apply counters & appearance only …'),{run=function()preview('display')end})
+    add('note',Z.L('Ändert keine Tab-Aufteilung; zeigt vorher die betroffenen Tabs und Einstellungen.','Leaves the tab layout unchanged; lists affected tabs and settings first.'))
     add('section',Z.L('Sicherung & Wiederherstellung','Backup & restore'))
     add('note',Z.L('Die erste bestätigte Einrichtung sichert die betroffene Ausgangskonfiguration pro Charakter. Weitere Einrichtungen überschreiben diese Sicherung nicht. Chatverlauf ist nicht Bestandteil der Sicherung.','The first confirmed setup saves the affected original configuration per character. Later setups preserve that backup. Chat history is not included.'))
     add('action',Z.L('Standardkonfiguration wiederherstellen …','Restore original configuration …'),{run=function()preview('restore')end})

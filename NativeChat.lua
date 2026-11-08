@@ -176,6 +176,10 @@ function N.Preview(mode,options)
                 end
             end
             p.cvars=copy(p.backup.cvars)
+        elseif p.mode=='display'then
+            -- Counters and appearance only: no tab, group or channel changes.
+            p.rows[#p.rows+1]=Z.L('Tab-Aufteilung, Nachrichtengruppen und Kanäle bleiben unverändert.','Tab layout, message groups and channels remain unchanged.')
+            p.cvars=desiredCvars(p.prefs)
         else
             local used,selected={},{}
             for _,d in ipairs(definitions)do if p.prefs.include[d.key]then selected[d.key]=true end end
