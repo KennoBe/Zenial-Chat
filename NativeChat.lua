@@ -221,26 +221,24 @@ function N.Preview(mode,options)
                 -- Existing custom titles remain intact. Generated/default DE/EN titles follow locale.
                 local rename=create
                 for _,alias in ipairs(d.aliases)do if current.name==alias then rename=true end end
-                if rename then target.name=Z.L(d.de,d.en)end
+                if rename and d.key~='general'then target.name=Z.L(d.de,d.en)end
                 -- New tabs inherit the font size of General when it is readable.
                 if create and before.windows[1]and before.windows[1].fontSize then target.fontSize=before.windows[1].fontSize end
                 target.groups=create and{}or copy(current.groups);target.channels=create and{}or copy(current.channels)
-                local remove={}
-                for _,other in ipairs(definitions)do if other.key~=d.key and selected[other.key]then
-                    for _,g in ipairs(other.groups)do
-                        if not critical[g]and(not noise[g]or d.key=='general'and p.prefs.moveSystem and selected.system)then remove[g]=true end
-                    end
-                end end
-                if d.key=='general'and not(p.prefs.moveSystem and selected.system)then for g in pairs(noise)do remove[g]=nil end end
-                for i=#target.groups,1,-1 do if remove[target.groups[i]]then table.remove(target.groups,i)end end
-                for _,g in ipairs(d.groups)do if ChatTypeGroup[g]and not contains(target.groups,g)then target.groups[#target.groups+1]=g end end
-                if d.key=='general'and not p.prefs.moveSystem and record.backup and record.backup.windows[id]then
-                    for _,g in ipairs(record.backup.windows[id].groups)do if noise[g]and ChatTypeGroup[g]and not contains(target.groups,g)then target.groups[#target.groups+1]=g end end
+                -- General keeps its subscriptions; extra tabs provide additional views.
+                if d.key~='general'then
+                    local remove={}
+                    for _,other in ipairs(definitions)do if other.key~=d.key and selected[other.key]then
+                        for _,g in ipairs(other.groups)do
+                            if not critical[g]and not noise[g]then remove[g]=true end
+                        end
+                    end end
+                    for i=#target.groups,1,-1 do if remove[target.groups[i]]then table.remove(target.groups,i)end end
+                    for _,g in ipairs(d.groups)do if ChatTypeGroup[g]and not contains(target.groups,g)then target.groups[#target.groups+1]=g end end
+                    if selected.general then for _,channel in ipairs(public)do
+                        for i=#target.channels,1,-1 do if target.channels[i]==channel then table.remove(target.channels,i)end end
+                    end end
                 end
-                if selected.general then for _,channel in ipairs(public)do
-                    if d.key=='general'then if not contains(target.channels,channel)then target.channels[#target.channels+1]=channel end
-                    else for i=#target.channels,1,-1 do if target.channels[i]==channel then table.remove(target.channels,i)end end end
-                end end
                 p.targets[id]=target;p.touched[id]=true
                 local add,del={},{}
                 for _,g in ipairs(target.groups)do if not contains(current.groups,g)then add[#add+1]=g end end
@@ -248,7 +246,7 @@ function N.Preview(mode,options)
                 entries[#entries+1]={def=d,current=current,target=target,create=create,added=add,removed=del};roleTab[d.key]=target
             end end
             if next(p.targets)==nil then error(Z.L('Wähle mindestens einen Tab.','Select at least one tab.'))end
-            p.rows[#p.rows+1]=Z.L('So wird der Blizzard-Chat aufgeteilt. Bestehende Tabs behalten ihren Verlauf; verschoben werden nur die aufgeführten Nachrichtenarten.','This is how Blizzard chat will be split. Existing tabs keep their history; only the listed message types are moved.')
+            p.rows[#p.rows+1]=Z.L('Zusätzliche Tabs zeigen die ausgewählten Nachrichtenarten. Allgemein behält seine bisherigen Nachrichtenarten und Kanäle. Bestehende Tabs behalten ihren Verlauf.','Additional tabs show the selected message types. General keeps its existing message types and channels. Existing tabs keep their history.')
             local generalName=before.windows[1]and before.windows[1].name or Z.L('Allgemein','General')
             for _,e in ipairs(entries)do
                 local t,lines=e.target,{}
@@ -295,7 +293,7 @@ function N.Preview(mode,options)
         display[#display+1]='  '..string.format(Z.L('Kompakte Tab-Schrift: %s · Zusätzliche Buttons ausblenden: %s · Hintergründe ausblenden: %s','Compact tab text: %s · Hide extra buttons: %s · Hide backgrounds: %s'),yes(p.prefs.compactTabs),yes(p.prefs.hideButtons),yes(p.prefs.hideBackground))
         p.rows[#p.rows+1]=table.concat(display,'\n')
         if p.mode=='setup'then
-            p.rows[#p.rows+1]=Z.L('Hinweis: Systemmeldungen (SYSTEM) und Fehler bleiben zusätzlich in Allgemein, damit nichts Wichtiges verloren geht. Questmeldungen können dort weiterhin erscheinen.','Note: system messages (SYSTEM) and errors also stay in General so nothing important is lost. Quest messages may still appear there.')
+            p.rows[#p.rows+1]=Z.L('Allgemein bleibt unverändert; Nachrichten erscheinen dort weiterhin entsprechend deiner bisherigen Konfiguration.','General stays unchanged; messages continue to appear there according to your existing configuration.')
         end
         p.rows[#p.rows+1]=Z.L('Der ZENIAL-Messenger bleibt unverändert. Chatverlauf ist nicht Teil der Sicherung.','The ZENIAL messenger is unchanged. Chat history is not part of the backup.')
         return p

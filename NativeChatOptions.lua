@@ -51,7 +51,7 @@ function O.Add(add)
     add('action',Z.L('Chat automatisch einrichten …','Set up chat automatically …'),{run=function()preview('setup')end})
     add('section',Z.L('Geplante Tab-Aufteilung','Planned tab layout'))
     local details={
-        general=Z.L('Sagen, Schreien, Emotes und beigetretene öffentliche Kanäle.','Say, yell, emotes and joined public channels.'),
+        general=Z.L('Behält alle bisherigen Nachrichtenarten und Kanäle. Die anderen Tabs sind zusätzliche Ansichten.','Keeps all existing message types and channels. The other tabs are additional views.'),
         guild=Z.L('Gilde und Offizier.','Guild and officer.'),
         group=Z.L('Gruppe, Schlachtzug, Instanz und Schlachtzugswarnungen – einschließlich Anführer.','Party, raid, instance and raid warnings, including leaders.'),
         whisper=Z.L('Flüstern und Battle.net.','Whispers and Battle.net.'),
@@ -62,8 +62,7 @@ function O.Add(add)
         add('check',Z.L(d.de,d.en),{get=function()return options().include[key]end,set=function(v)options().include[key]=v end})
         add('note',details[key])
     end
-    check(add,Z.L('Systemmeldungen aus Allgemein auslagern','Move system messages out of General'),'moveSystem')
-    add('note',Z.L('SYSTEM bleibt in Allgemein als Auffanggruppe erhalten. Quest- und kritische Systemmeldungen lassen sich deshalb nicht vollständig auslagern. Nicht ausgewählte Tabs werden nicht umkonfiguriert.','SYSTEM stays in General as a safety net, so quest and critical system messages cannot be moved completely. Excluded tabs are not reconfigured.'))
+    add('note',Z.L('Allgemein bleibt unverändert. Nicht ausgewählte Tabs werden nicht umkonfiguriert.','General stays unchanged. Excluded tabs are not reconfigured.'))
     add('action',Z.L('Vorschau der geplanten Änderungen …','Preview planned changes …'),{run=function()preview('setup')end})
     add('section',Z.L('Native Tab-Zähler','Native tab counters'))
     check(add,Z.L('Ungelesen-Zähler aktivieren','Enable unread counters'),'unread')
