@@ -2,7 +2,7 @@ local _,Z=...
 local U={rows={},headers={},listScroll=0,dirty=false,settingsPage='appearance'};Z.UI=U
 local function selected()return Z.store and Z.store:Get(Z.store.db.ui.selected)end
 local function textTime(at)return Z.Format.Stamp('%H:%M',at or 0)end
-local titles={guild={'Gilde','Guild'},groups={'Gruppen','Groups'},people={'Direktnachrichten','Direct messages'},channels={'Kanäle','Channels'}}
+local titles={guild={'Gilde','Guild'},groups={'Gruppen','Groups'},people={'Direktnachrichten','Direct messages'},channels={'Kanäle','Channels'},opposite={'Gegnerische Fraktion','Opposite faction'}}
 local function caption(group)local a=titles[group]or{'Gespräche','Conversations'};return Z.L(a[1],a[2])end
 function U.Notice(message)
     U.Build();U.notice:SetText(message or'');U.notice:SetShown(message~=nil and message~='')

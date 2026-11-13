@@ -13,6 +13,7 @@ Format.lua
 Search.lua
 Layout.lua
 Adapter.lua
+Opposite.lua
 PhraseCodec.lua
 PhraseData.lua
 Phrases.lua

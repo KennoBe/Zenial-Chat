@@ -10,10 +10,12 @@ end
 local frame=CreateFrame('Frame');Z.eventFrame=frame
 frame:RegisterEvent('ADDON_LOADED');frame:RegisterEvent('PLAYER_LOGIN')
 for _,event in ipairs(Z.Adapter.events or{})do pcall(frame.RegisterEvent,frame,event)end
+for _,event in ipairs(Z.Opposite.events)do pcall(frame.RegisterEvent,frame,event)end
 frame:SetScript('OnEvent',function(_,event,...)
     if event=='ADDON_LOADED'then local name=...;if name=='ZenialChat'then Z.Initialize()end;return end
     if not Z.ready then if event=='PLAYER_LOGIN'then Z.Initialize()else return end end
-    local c,row,added=Z.adapter:OnEvent(event,...)
+    local c,row,added
+    if Z.Opposite.handles[event]then c,row,added=Z.Opposite.OnEvent(event,...)else c,row,added=Z.adapter:OnEvent(event,...)end
     if event=='PLAYER_LOGIN'then Z.adapter:RefreshIdentity();Z.UI.CreateMinimapButton();Z.NativeChat.Initialize()end
     Z.Notifications.Incoming(c,row,added)
     Z.UI.RequestRefresh(event,c and c.key)

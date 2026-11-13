@@ -105,7 +105,7 @@ local function buildSpecs()
         add('slider',Z.L('Hinweis-Dauer','Notice duration'),{key='toastDuration',min=2,max=15,step=1,format=function(v)return math.floor(v)..' s'end})
         add('check',Z.L('Im Kampf keine Töne und Hinweise','No sounds or notices in combat'),{key='suppressInCombat'})
         add('action',Z.L('Hinweis-Vorschau anzeigen','Show notice preview'),{run=function()Z.Notifications.Preview()end})
-        for _,group in ipairs({{'whispers','Flüstern','Whispers'},{'bnet','Battle.net','Battle.net'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'raidWarning','Schlachtzugswarnungen','Raid warnings'},{'channels','Öffentliche Kanäle','Public channels'}})do
+        for _,group in ipairs({{'whispers','Flüstern','Whispers'},{'bnet','Battle.net','Battle.net'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'raidWarning','Schlachtzugswarnungen','Raid warnings'},{'channels','Öffentliche Kanäle','Public channels'},{'opposite','Gegnerische Fraktion','Opposite faction'}})do
             local key=group[1];local label=Z.L(group[2],group[3])
             add('section',label)
             for _,setting in ipairs({{'sound','Ton abspielen','Play sound'},{'toast','Hinweis anzeigen','Show notification'}})do

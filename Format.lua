@@ -97,6 +97,7 @@ function F.ConversationLabel(c)
     if c.alias and c.alias~=''then return c.alias end
     if c.kind=='WHISPER'then return F.Name(c.name)end
     if c.kind=='BN_WHISPER'then return c.name end
+    if c.kind=='XFACTION'then return Z.L('Gegnerische Fraktion','Opposite faction')end
     local mode=setting('channelLabels')or'full'
     if mode=='full'then return c.name end
     if c.kind=='CHANNEL'then

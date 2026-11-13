@@ -130,12 +130,18 @@ function T.Icon(parent,conversation)
     T.SetIcon(f,conversation or{})
     return f
 end
+-- The banner of the other faction; unknown factions keep the generic group icon.
+function T.OppositeIcon(faction)
+    if faction=='Horde'then return T.icons.alliance end
+    if faction=='Alliance'then return T.icons.horde end
+    return'Interface\\Icons\\INV_Misc_GroupLooking'
+end
 function T.SetIcon(icon,c)
     local coords=c.classFile and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[c.classFile]
     if c.classFile and setAtlas(icon.texture,'groupfinder-icon-class-'..c.classFile:lower())then return end
     icon.texture:SetTexCoord(0,1,0,1)
     if coords then icon.texture:SetTexture('Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES');icon.texture:SetTexCoord(unpack(coords))
-    else icon.texture:SetTexture(T.icons[c.slot]or T.icons[c.kind]or'Interface\\Icons\\INV_Misc_GroupLooking')end
+    else icon.texture:SetTexture(c.kind=='XFACTION'and T.OppositeIcon(c.target)or T.icons[c.slot]or T.icons[c.kind]or'Interface\\Icons\\INV_Misc_GroupLooking')end
 end
 local CLASS_TEXTURE='Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES'
 -- The atlas of a known race, if this client really has it. Unknown means no race icon, never a guess.

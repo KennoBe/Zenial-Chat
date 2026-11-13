@@ -109,6 +109,7 @@ local function applyDefaults(settings)
         bnet = { sound = true, toast = true },
         -- The client plays its own raid warning sound; a second one stays opt-in.
         raidWarning = { sound = false, toast = false },
+        opposite = { sound = false, toast = false },
     }
     local notifications = ensureTable(settings, 'notifications')
     notifications.community = nil
@@ -148,8 +149,9 @@ local kindGroups = {
     GUILD = 'guild', OFFICER = 'guild',
     PARTY = 'groups', RAID = 'groups', INSTANCE_CHAT = 'groups',
     WHISPER = 'people', BN_WHISPER = 'people', CHANNEL = 'channels',
+    XFACTION = 'opposite',
 }
-local groupOrder = { guild = 1, groups = 2, people = 3, channels = 4 }
+local groupOrder = { guild = 1, groups = 2, people = 3, channels = 4, opposite = 5 }
 
 function Store.Group(kind)
     return kindGroups[string.upper(tostring(kind or ''))]
@@ -168,6 +170,10 @@ function Store.Key(spec)
     if kind == 'WHISPER' or kind == 'BN_WHISPER' then
         parts[#parts + 1] = encode(spec.target)
         if spec.scope ~= nil then parts[#parts + 1] = encode(spec.scope) end
+    elseif kind == 'XFACTION' then
+        -- One fixed conversation per own realm and own faction: scope is the realm, target the faction.
+        parts[#parts + 1] = encode(spec.scope)
+        parts[#parts + 1] = encode(spec.target)
     elseif kind == 'CHANNEL' then
         parts[#parts + 1] = encode(spec.scope)
         parts[#parts + 1] = encode(spec.channelName or spec.target)
@@ -194,6 +200,9 @@ local function indexConversation(self, conversation)
     end
     self._messageIndexes[conversation.key] = index
 end
+
+-- The opposite-faction conversation holds at most this many messages, whatever the retention settings say.
+local OPPOSITE_LIMIT = 200
 
 function Store.New(db, nowFn)
     if type(db) ~= 'table' then db = {} end
@@ -239,6 +248,7 @@ function Store.New(db, nowFn)
     self.people = ensureTable(db, 'people')
     self._peopleCount = 0
     for _ in pairs(self.people) do self._peopleCount = self._peopleCount + 1 end
+    for _, conversation in pairs(self.conversations) do self:CapOpposite(conversation) end
     if self.settings.retentionCount > 0 or self.settings.retentionDays > 0 then self:PruneAll() end
     return self
 end
@@ -344,6 +354,7 @@ function Store:Append(conversation, message, visibleAtEnd)
         conversation.closed = false
     end
     self:Prune(conversation)
+    self:CapOpposite(conversation)
     notify(self, 'message', key)
     return stored, true
 end
@@ -491,6 +502,11 @@ function Store:Prune(conversation)
     if count <= 0 or conversation.keep then return end
     if #conversation.messages <= count + math.max(20, math.floor(count * .05)) then return end
     removeOldest(self, conversation, prunableCount(self, conversation, count, self.settings.retentionDays))
+end
+function Store:CapOpposite(conversation)
+    if conversation.kind ~= 'XFACTION' then return end
+    local excess = #conversation.messages - OPPOSITE_LIMIT
+    if excess > 0 then removeOldest(self, conversation, excess) end
 end
 function Store:PruneAll()
     for _, conversation in pairs(self.conversations) do
