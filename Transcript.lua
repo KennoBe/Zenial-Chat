@@ -16,7 +16,13 @@ local function estimate(text,width,size,spacing)
     else lines=math.max(1,math.ceil(characters(plain)*size*.52/math.max(40,width)))end
     return lines*(size+3+spacing)
 end
-local function messagePlain(msg)return msg.deleted and Z.L('Nachricht gelöscht','Message deleted')or msg.text or''end
+-- Opposite-faction messages show a header and an interpretation around the original text. The index only needs
+-- a size estimate for them: the real height is measured when the row is drawn.
+local function messagePlain(msg,conv)
+    if msg.deleted then return Z.L('Nachricht gelöscht','Message deleted')end
+    if conv and conv.kind=='XFACTION'then return'\n'..(type(msg.text)=='string'and msg.text or'')..'\n\n'end
+    return msg.text or''
+end
 local function avatar(s)
     if s.senderIcon=='none'then return 0 end
     return s.layoutStyle=='compact'and math.min(s.iconSize,24)or s.iconSize
@@ -29,13 +35,14 @@ local function rowHeight(info,s)
     if s.layoutStyle=='compact'then return info.dateHeight+(info.grouped and 1 or 16)+info.bodyHeight+10+3 end
     return info.dateHeight+(info.grouped and 2 or 20)+info.bodyHeight+16+(s.timeFormat=='off'and 6 or 14)
 end
-local function groupedWith(previous,msg,s)
+local function groupedWith(previous,msg,s,conv)
+    if conv and conv.kind=='XFACTION'then return false end
     if not s.groupMessages or s.layoutStyle=='classic'or not previous or previous.context or msg.context then return false end
     local last=previous.msg
     return last.sender==msg.sender and(last.outgoing==true)==(msg.outgoing==true)and(tonumber(msg.at)or 0)-(tonumber(last.at)or 0)<=GROUP_SECONDS
 end
-local function addRow(u,msg,i,width,size,s)
-    local plain=messagePlain(msg);local previous=u.rowInfo[i-1]
+local function addRow(u,msg,i,width,size,s,conv)
+    local plain=messagePlain(msg,conv);local previous=u.rowInfo[i-1]
     local classic=s.layoutStyle=='classic'
     local bodyMax=classic and math.max(90,width-16)or math.max(90,math.floor(width*.79)-bubbleLeft(s))
     local day=Z.Format.DayKey(msg.at)
@@ -43,7 +50,7 @@ local function addRow(u,msg,i,width,size,s)
     local cached=u.measured[msg.id]
     local bodyHeight=cached and cached.text==plain and cached.height or estimate(plain,bodyMax,size,s.lineSpacing)
     local info={bodyMax=bodyMax,bodyHeight=bodyHeight,dateHeight=dateHeight,day=day,msg=msg,plain=plain,at=msg.at,context=msg.context}
-    info.grouped=dateHeight==0 and groupedWith(previous,msg,s)
+    info.grouped=dateHeight==0 and groupedWith(previous,msg,s,conv)
     info.height=rowHeight(info,s)
     u.rowInfo[i]=info;u.rowMessages[i]=msg
     u.prefix[i+1]=u.prefix[i]+info.height
@@ -55,7 +62,7 @@ local function appendOnly(u,conv,base,count)
     if u.indexFull or not n or n<1 or not u.rowInfo or u.indexMessages~=conv.messages or count<=n then return false end
     for i=1,n do
         local info,msg=u.rowInfo[i],conv.messages[base+i]
-        if not info or info.msg~=msg or info.at~=msg.at or info.context~=msg.context or info.plain~=messagePlain(msg)then return false end
+        if not info or info.msg~=msg or info.at~=msg.at or info.context~=msg.context or info.plain~=messagePlain(msg,conv)then return false end
     end
     return true
 end
@@ -75,7 +82,7 @@ function R.Index(u,conv)
     local first=1
     if appendOnly(u,conv,base,count)then first=u.indexCount+1
     else u.prefix={0};u.rowInfo={};u.rowMessages={}end
-    for i=first,count do addRow(u,conv.messages[base+i],i,width,size,s)end
+    for i=first,count do addRow(u,conv.messages[base+i],i,width,size,s,conv)end
     u.indexFull=false
     u.indexMessages=conv.messages;u.indexCount=count;u.indexDirty=false
     u.maximum=math.max(0,u.prefix[#u.prefix]-u.viewport:GetHeight())
@@ -116,10 +123,106 @@ end
 local function loadNewer(u)
     u.windowEnd=u.windowEnd+R.WINDOW_STEP;u.indexDirty=true;u.indexFull=true
 end
+-- Opposite faction ---------------------------------------------------------------------------
+-- Text of other players and learned meanings are data, never markup: a pipe is doubled.
+local function escape(text)return(tostring(text):gsub('|','||'))end
+local CHANNELS={SAY={'Sagen','Say'},YELL={'Schreien','Yell'}}
+local HEAD_COLOR,READING_COLOR='|cffa79c84','|cffd9c58a'
+local function wordList(text)
+    local words={}
+    if type(text)=='string'then for word in text:gmatch('%S+')do words[#words+1]=word end end
+    return words
+end
+-- Words are clickable when a correction can be stored for them: not for exact lines, only for a known language.
+local function wordsEditable(msg)
+    return msg.reading~='exact'and Z.Interpret and Z.Interpret.LanguageId(msg.language)~=nil and not tostring(msg.id):find('|',1,true)
+end
+local function originalLine(msg)
+    local text=msg.text
+    if type(text)~='string'or text==''then return nil end
+    if not wordsEditable(msg)then return escape(text)end
+    local n=0
+    return(text:gsub('(%s*)(%S+)',function(space,word)
+        n=n+1
+        return space..'|Hzchatxf:'..msg.id..':'..n..'|h'..escape(word)..'|h'
+    end))
+end
+local function alternativesLine(detail)
+    local parts={}
+    if type(detail)=='table'and type(detail.words)=='table'then
+        for _,e in ipairs(detail.words)do
+            if type(e.alternatives)=='table'and#e.alternatives>0 then
+                local alts={}
+                for _,a in ipairs(e.alternatives)do alts[#alts+1]=escape(a)end
+                parts[#parts+1]=escape(e.chosen or e.fake or'')..' = '..table.concat(alts,' / ')
+            end
+        end
+    end
+    if#parts==0 then return nil end
+    return Z.L('Alternativen: ','Alternatives: ')..table.concat(parts,'; ')
+end
+-- Header, original text and interpretation of one message. The interpretation is computed here, never stored,
+-- so a correction takes effect on the next draw. Never shows a probability.
+function R.OppositeText(msg)
+    local head={}
+    local channel=CHANNELS[msg.channel]
+    if channel then head[#head+1]=Z.L(channel[1],channel[2])end
+    if type(msg.language)=='string'and msg.language~=''then head[#head+1]=escape(msg.language)end
+    local lines={HEAD_COLOR..table.concat(head,' · ')..'|r'}
+    local original=originalLine(msg)
+    if original then lines[#lines+1]=original end
+    local reading,meaning,detail=msg.reading,msg.meaning,nil
+    if reading~='exact'then reading,meaning,detail=Z.Interpret.Read(msg)end
+    local label
+    if reading=='exact'then label=Z.L('Exakt decodiert: ','Decoded exactly: ')..escape(meaning or'')
+    elseif reading=='guess'then label=Z.L('Vermutete Bedeutung: ','Presumed meaning: ')..escape(meaning or'')..Z.L(' (Vermutung)',' (guess)')
+    else label=Z.L('Nicht interpretierbar','Cannot be interpreted')end
+    lines[#lines+1]=READING_COLOR..label..'|r'
+    local alternatives=reading=='guess'and alternativesLine(detail)
+    if alternatives then lines[#lines+1]=READING_COLOR..alternatives..'|r'end
+    return table.concat(lines,'\n')
+end
+local function learnedMeaning(language,word)
+    local db=Z.store and Z.store.db
+    local list=db and type(db.learned)=='table'and db.learned[language]
+    return type(list)=='table'and list[Z.Interpret.Key(word)]or nil
+end
+local function rebuild(u)
+    u.measured={};u.indexDirty=true;u.indexFull=true;u.Refresh()
+end
+-- Right-click on a word of an original line: set or forget its meaning.
+function R.WordMenu(id,position)
+    local u=Z.UI;local conv=Z.store:Get(Z.store.db.ui.selected)
+    if not u or not conv or conv.kind~='XFACTION'then return end
+    local index=Z.store:IndexOf(conv.key,id);local msg=index and conv.messages[index]
+    if not msg or not wordsEditable(msg)then return end
+    local word=wordList(msg.text)[position];if not word then return end
+    local language=Z.Interpret.LanguageId(msg.language)
+    local current=learnedMeaning(language,word)
+    local items={{text=Z.L('Bedeutung festlegen …','Set meaning …'),run=function()
+        u.Prompt(Z.L('Bedeutung von ','Meaning of ')..Z.Plain(word),current or'',function(value)
+            local ok,err=Z.Interpret.Learn(language,word,value)
+            if ok then rebuild(u)
+            elseif err=='limit'then u.Notice(Z.L('Zu viele eigene Bedeutungen für diese Sprache. Vergiss zuerst einige.','Too many own meanings for this language. Forget some first.'))
+            else u.Notice(Z.L('Ungültige Bedeutung: höchstens 64 Zeichen, keine Steuerzeichen und kein senkrechter Strich.','Invalid meaning: at most 64 characters, no control characters and no vertical bar.'))end
+        end)
+    end}}
+    if current then
+        items[#items+1]={text=Z.L('Bedeutung vergessen','Forget meaning'),run=function()
+            Z.Interpret.Forget(language,word);rebuild(u)
+        end}
+    end
+    u.ShowMenu(u.frame,items,true)
+end
 local function handleLink(self,link,text,button)
     if not Z.Safe(link,text,button)or type(link)~='string'then return end
     local url=link:match('^zchaturl:(.+)$')
     if url then Z.UI.ShowCopy(url,Z.L('Adresse kopieren · Strg+C','Copy address · Ctrl+C'));return end
+    local xfId,xfWord=link:match('^zchatxf:(.+):(%d+)$')
+    if xfId then
+        if button=='RightButton'then R.WordMenu(xfId,tonumber(xfWord))end
+        return
+    end
     if link:match('^zchattime:')then
         if self.message and IsShiftKeyDown and IsShiftKeyDown()then Z.UI.QuoteMessage(self.message,'time')end
         return
@@ -145,6 +248,9 @@ local function handleLinkEnter(self,link)
     if not Z.Safe(link)or type(link)~='string'then return end
     local msg=self.message;local conv=Z.store:Get(Z.store.db.ui.selected)
     if link:match('^zchaturl:')then Z.Theme.Tooltip(self,link:match('^zchaturl:(.+)$')or'',Z.L('Klicken zum Kopieren. Addons können keinen Browser öffnen.','Click to copy. Addons cannot open a browser.'));return end
+    if link:match('^zchatxf:')then
+        Z.Theme.Tooltip(self,Z.L('Bedeutung festlegen','Set meaning'),Z.L('Rechtsklick: Bedeutung festlegen …','Right-click: set meaning …'));return
+    end
     if link:match('^zchattime:')then
         if msg then Z.Theme.Tooltip(self,Z.Format.FullTime(msg.at),Z.L('Shift-Klick zitiert die Nachricht in die Eingabe.','Shift-click quotes the message into the input.'))end
         return
@@ -291,7 +397,8 @@ function R.Render(u,secondPass)
                 if row.bodyFrame.message~=msg then row.bodyFrame.message=msg;row.bodyFrame.overLink=false end
                 local text=msg.deleted and Z.L('Nachricht gelöscht','Message deleted')or msg.text or''
                 if not msg.deleted then
-                    if s.urlLinks then text=Z.Format.Linkify(text)end
+                    if conv.kind=='XFACTION'then text=R.OppositeText(msg)
+                    elseif s.urlLinks then text=Z.Format.Linkify(text)end
                     if u.highlightKey==conv.key and u.highlightTerms then text=Z.Format.Highlight(text,u.highlightTerms)end
                 end
                 local highlighted=msg.id==u.highlightId or msg.id==u.rangeStart

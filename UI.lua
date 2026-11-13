@@ -80,7 +80,7 @@ function U.HistoryArrow(key)
 end
 local function endHistory()U.historyPos=nil;U.historyDraft=nil end
 function U.Submit()
-    local c=selected();if not c then return end
+    local c=selected();if not c or c.kind=='XFACTION'then return end
     local text=U.input:GetText();local ok,err=Z.adapter:Send(c,text)
     if ok then Z.store:AddSent(c.key,text);endHistory();U.input:SetText('');Z.store:SetDraft(c.key,'');U.Notice('');U.RequestRefresh('message',c.key)
     else U.Notice(err or Z.L('Nachricht konnte nicht gesendet werden.','Message could not be sent.'))end
@@ -378,8 +378,12 @@ function U.Refresh()
     U.channelName:SetText(c and(c.alias and c.alias~=''and c.alias..' ('..c.name..')'or c.name)or Z.L('Deine Gespräche','Your conversations'))
     U.channelDetail:SetText(c and caption(Z.Store.Group(c.kind))or Z.L('Wähle ein Gespräch oder starte eine Nachricht.','Choose a conversation or start a message.'))
     Z.Theme.SetIcon(U.channelIcon,c or{kind='COMMUNITY'})
-    if c then U.input:Enable()else U.input:Disable()end;U.send:SetEnabled(c~=nil)
-    U.placeholder:SetShown(U.input:GetText()=='')
+    -- The opposite-faction conversation is read-only: a phrase button replaces the input.
+    local readOnly=c~=nil and c.kind=='XFACTION'
+    if c and not readOnly then U.input:Enable()else U.input:Disable()end;U.send:SetEnabled(c~=nil and not readOnly)
+    if readOnly then U.input:ClearFocus()end
+    U.inputBackground:SetShown(not readOnly);U.send:SetShown(not readOnly);U.reply:SetShown(readOnly)
+    U.placeholder:SetShown(not readOnly and U.input:GetText()=='')
     Z.Transcript.Render(U)
     U.RefreshRecovery()
     Z.Theme.ButtonIcon(U.lock,Z.store.settings.locked and'Interface\\PetBattles\\PetBattle-LockIcon'or'Interface\\Icons\\INV_Misc_Key_01',nil,24)
@@ -440,6 +444,7 @@ function U.Layout()
     U.send.label:SetText(U.metrics.iconOnly and''or Z.L('Senden','Send'))
     U.send.label:ClearAllPoints();U.send.label:SetPoint('TOPLEFT',U.send,'TOPLEFT',27,-3);U.send.label:SetPoint('BOTTOMRIGHT',U.send,'BOTTOMRIGHT',-5,3)
     U.send.symbol:ClearAllPoints();U.send.symbol:SetPoint(U.metrics.iconOnly and'CENTER'or'LEFT',U.send,U.metrics.iconOnly and'CENTER'or'LEFT',U.metrics.iconOnly and 0 or 8,0)
+    T.Place(U.reply,10,25,content-30,34,U.composer)
     T.Place(U.inputBackground,10,24,content-sendWidth-38,38,U.composer)
     U.input:SetWidth(content-sendWidth-46);U.input:SetHeight(34)
     T.Place(U.placeholder,12,9,math.max(40,content-sendWidth-70),22,U.inputBackground)
@@ -511,6 +516,7 @@ function U.Build()
     U.input:SetScript('OnEscapePressed',function(self)if self:HasFocus()then self:ClearFocus()else f:Hide()end end)
     U.input:SetScript('OnArrowPressed',function(_,key)U.HistoryArrow(key)end)
     U.send=T.Button(U.composer,'',U.Submit,'own');T.ButtonIcon(U.send,'Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up');U.send.tip=Z.L('Nachricht senden · Enter','Send message · Enter')
+    U.reply=T.Button(U.composer,Z.L('Mit Phrase antworten','Reply with a phrase'),function()if Z.Opposite then Z.Opposite.OpenPhrases()end end,'own');U.reply:Hide()
     U.notice=T.Text(U.chatPanel,'',11,false,'goldBright');U.notice:SetWordWrap(true);U.notice:Hide()
     U.recovery=T.Button(U.chatPanel,Z.L('Fehlgeschlagenen Text wiederherstellen','Restore failed message'),function()U.RestoreRecovery(U.recoveryAttempt)end);U.recovery:Hide()
     U.settingsPanel=T.Frame(f,'shell','line');U.settingsPanel:Hide();U.settingsNav=T.Frame(f,'sidebar','line');U.settingsNav:Hide()

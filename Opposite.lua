@@ -33,6 +33,20 @@ function O.OpenPhrases(channel)
     if type(ui)~='table'or type(ui.Open)~='function'then return false end
     return(pcall(ui.Open,channel))
 end
+-- Opens the window on the opposite-faction conversation of this realm and faction and shows a message.
+-- Never creates the conversation; an unknown id or a missing conversation only leaves the window open.
+function O.OpenMessage(messageId)
+    local ui=Z.UI
+    if type(ui)~='table'or type(ui.Open)~='function'then return false end
+    return(pcall(function()
+        ui.Open()
+        local store,me=Z.store,Z.adapter and Z.adapter.me
+        if not store or not me or not me.realm or me.realm==''or not me.faction or me.faction==''then return end
+        local key=Z.Store.Key({kind='XFACTION',scope=me.realm,target=me.faction})
+        if not store:Get(key)then return end
+        ui.Select(key,store:IndexOf(key,messageId)and messageId or nil)
+    end))
+end
 local function handle(event,...)
     local channel=O.handles[event];if not channel then return end
     local adapter,store=Z.adapter,Z.store;if not adapter or not store then return end
