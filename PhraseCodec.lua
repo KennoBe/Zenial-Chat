@@ -15,7 +15,8 @@ end
 local SPACES={[0x85]=true,[0xA0]=true,[0x1680]=true,[0x2028]=true,[0x2029]=true,[0x202F]=true,[0x205F]=true,[0x3000]=true}
 local function validEntry(value)
     if type(value)~='string'or value==''or#value>4 then return false end
-    if value:find('[%z\1-\31\127|%s]')then return false end
+    -- No %s: it depends on the C locale and could match the byte 0xA0 inside a valid character such as a-grave (C3 A0).
+    if value:find('[%z\1-\32\127|]')then return false end
     local b1=value:byte(1)
     local length,code
     if b1<0x80 then length,code=1,b1
@@ -32,6 +33,9 @@ local function validEntry(value)
     if length==3 and(code<0x800 or(code>=0xD800 and code<=0xDFFF))then return false end
     if length==4 and(code<0x10000 or code>0x10FFFF)then return false end
     if SPACES[code]or(code>=0x2000 and code<=0x200A)then return false end
+    -- invisible and bidirectional control characters
+    if(code>=0x80 and code<=0x9F)or code==0xAD or(code>=0x200B and code<=0x200F)or(code>=0x2028 and code<=0x202E)
+        or(code>=0x2060 and code<=0x206F)or code==0xFEFF or(code>=0xFFF9 and code<=0xFFFF)then return false end
     return true
 end
 C.ValidEntry=validEntry
