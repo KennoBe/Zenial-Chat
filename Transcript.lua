@@ -69,7 +69,7 @@ end
 local function windowFor(total)return total>R.WINDOW and total-R.WINDOW or 0 end
 function R.Index(u,conv)
     local width=u.viewport:GetWidth();local s=Z.store.settings;local size=s.fontSize
-    local signature=table.concat({conv.key,width,size,s.layoutStyle,s.senderIcon,s.iconSize,s.lineSpacing,s.fontFace,s.fontOutline,s.timeFormat,tostring(s.groupMessages),tostring(s.dateSeparators),tostring(s.urlLinks)},':')
+    local signature=table.concat({conv.key,width,size,s.layoutStyle,s.senderIcon,s.iconSize,s.lineSpacing,s.fontFace,s.fontOutline,s.timeFormat,tostring(s.groupMessages),tostring(s.dateSeparators),tostring(s.urlLinks),Z.CommunityBridge and Z.CommunityBridge.version or 0},':')
     if u.indexSignature~=signature then u.measured={};u.indexDirty=true;u.indexFull=true;u.indexSignature=signature end
     local total=#conv.messages
     if u.windowKey~=conv.key or(u.windowBase or 0)>=total then u.windowKey=conv.key;u.windowBase=windowFor(total);u.windowEnd=nil;u.indexDirty=true;u.indexFull=true end
@@ -296,6 +296,12 @@ local function senderClass(conv,msg)
     if person and person.class then return person.class end
     return conv.kind=='WHISPER'and conv.classFile or nil
 end
+-- Original icon in front of the name of a player Zenial Community has confirmed (read when drawing, never stored).
+local function xfIcon(msg)
+    if msg.outgoing or type(msg.senderGuid)~='string'or not Z.CommunityBridge then return''end
+    local ok,icon=pcall(Z.CommunityBridge.Icon,msg.senderGuid)
+    return ok and type(icon)=='string'and icon or''
+end
 local function placeBubble(u,row,conv,msg,info,w,text,s,highlighted)
     local T=Z.Theme;local style=s.layoutStyle;local own=msg.outgoing==true
     local classic=style=='classic';local compact=style=='compact'
@@ -310,7 +316,7 @@ local function placeBubble(u,row,conv,msg,info,w,text,s,highlighted)
         local who=Z.PlayerLink(conv,msg,'|cff'..nameColor..plainName..'|r')
         local icon=s.senderIcon~='none'and not own and T.InlineIcon(s,class,Z.store:Person(msg.sender),math.max(12,s.fontSize))or''
         local prefix=s.timeFormat~='off'and timeLink('|cffa79c84'..stampText..'|r')..' 'or''
-        bodyText=prefix..icon..(icon~=''and' 'or'')..who..': '..text
+        bodyText=prefix..icon..(icon~=''and' 'or'')..xfIcon(msg)..who..': '..text
     end
     row.body:SetText(bodyText)
     local bodyWidth=classic and info.bodyMax or math.min(info.bodyMax,math.max(100,math.ceil(row.body:GetUnboundedStringWidth())+2))
@@ -340,7 +346,7 @@ local function placeBubble(u,row,conv,msg,info,w,text,s,highlighted)
     row.author:SetShown(not info.grouped)
     if not info.grouped then
         T.MessageFont(row.author,12,true,'goldBright')
-        row.author:SetText((Z.PlayerLink(conv,msg,plainName)));row.author:SetJustifyH(own and'RIGHT'or'LEFT')
+        row.author:SetText(xfIcon(msg)..(Z.PlayerLink(conv,msg,plainName)));row.author:SetJustifyH(own and'RIGHT'or'LEFT')
         if compact and s.timeFormat~='off'then T.Place(row.author,x,info.dateHeight,math.max(40,bw-90),16,row)
         else T.Place(row.author,x,info.dateHeight,bw,18,row)end
         T.NameColor(row.author,s.classColors and class or nil)

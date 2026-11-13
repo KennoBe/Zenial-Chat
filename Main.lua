@@ -13,8 +13,9 @@ frame:RegisterEvent('ADDON_LOADED');frame:RegisterEvent('PLAYER_LOGIN')
 for _,event in ipairs(Z.Adapter.events or{})do pcall(frame.RegisterEvent,frame,event)end
 for _,event in ipairs(Z.Opposite.events)do pcall(frame.RegisterEvent,frame,event)end
 frame:SetScript('OnEvent',function(_,event,...)
-    if event=='ADDON_LOADED'then local name=...;if name=='ZenialChat'then Z.Initialize()end;return end
+    if event=='ADDON_LOADED'then local name=...;if name=='ZenialChat'then Z.Initialize()elseif name=='ZenialCommunity'then pcall(Z.CommunityBridge.Connect)end;return end
     if not Z.ready then if event=='PLAYER_LOGIN'then Z.Initialize()else return end end
+    if event=='PLAYER_LOGIN'then pcall(Z.CommunityBridge.Connect)end
     local c,row,added
     if Z.Opposite.handles[event]then c,row,added=Z.Opposite.OnEvent(event,...);if Z.Calibration then pcall(Z.Calibration.OnEvent,event,...)end else c,row,added=Z.adapter:OnEvent(event,...)end
     if event=='PLAYER_LOGIN'then Z.adapter:RefreshIdentity();Z.UI.CreateMinimapButton();Z.NativeChat.Initialize()end

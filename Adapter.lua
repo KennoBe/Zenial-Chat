@@ -263,7 +263,7 @@ function A:OnEvent(event,...)
  if outgoing then self:Confirm(c,text)end
  self.serial=self.serial+1;local line=self:Safe(args[11])and args[11]
  local id=line and line~=0 and'chat:'..self:Scope()..':'..self.session..':'..tostring(line)or'local:'..self.session..':'..self.serial
- local row={id=id,at=now(),sender=outgoing and self.me.name or sender,text=text,outgoing=outgoing==true,ownCharacter=outgoing and self.me.name or nil,senderClass=outgoing and self.me.classFile or senderClass,raidWarning=raidWarning or nil}
+ local row={id=id,at=now(),sender=outgoing and self.me.name or sender,text=text,outgoing=outgoing==true,ownCharacter=outgoing and self.me.name or nil,senderClass=outgoing and self.me.classFile or senderClass,senderGuid=not outgoing and guid and guid:match('^Player%-')and guid or nil,raidWarning=raidWarning or nil}
  local msg,added=self.store:Append(c,row,Z.IsVisibleAtEnd and Z.IsVisibleAtEnd(c.key)or false)
  return c,msg,added
 end

@@ -316,6 +316,18 @@ local function conversationRow(index)
     row:EnableMouseWheel(true);row:SetScript('OnMouseWheel',function(_,delta)U.listScroll=math.max(0,U.listScroll-delta*50);U.RefreshList()end)
     U.rows[index]=row;return row
 end
+-- Original icon for a whisper partner Zenial Community has confirmed, judged by the newest incoming message's GUID.
+local function whisperIcon(c)
+    if c.kind~='WHISPER'or not Z.CommunityBridge or not Z.CommunityBridge.active then return''end
+    for i=#c.messages,1,-1 do
+        local m=c.messages[i]
+        if not m.outgoing and not m.context then
+            local ok,icon=pcall(Z.CommunityBridge.Icon,m.senderGuid)
+            return ok and type(icon)=='string'and icon or''
+        end
+    end
+    return''
+end
 function U.RefreshList()
     local run=U.query~=''and U.sidebarSearch or nil
     local T=Z.Theme;local list=Z.store:List(U.query or'',run and run.hits or nil);local width=U.metrics.sidebarWidth-16
@@ -355,7 +367,7 @@ function U.RefreshList()
                 T.SetIcon(row.icon,c);local iconSize=compact and 24 or U.metrics.iconOnly and 38 or showPreview and 42 or 34
                 T.Place(row.icon,5,(entry.height-iconSize)/2,iconSize,iconSize,row)
                 local x=iconSize+15
-                row.name:SetText((c.pinned and'• 'or'')..Z.Format.ConversationLabel(c)..(c.muted and'  ·'or''));T.Place(row.name,x,compact and 7 or showPreview and 9 or 14,width-x-(showPreview and 48 or 30),20,row)
+                row.name:SetText((c.pinned and'• 'or'')..whisperIcon(c)..Z.Format.ConversationLabel(c)..(c.muted and'  ·'or''));T.Place(row.name,x,compact and 7 or showPreview and 9 or 14,width-x-(showPreview and 48 or 30),20,row)
                 local last=c.messages[#c.messages];local preview=last and(last.deleted and Z.L('Nachricht gelöscht','Message deleted')or Z.Plain(last.text))or''
                 if c.draft and c.draft~=''then preview=Z.L('Entwurf: ','Draft: ')..Z.Plain(c.draft)end
                 row.preview:SetText(preview:gsub('[\r\n]+',' '));T.Place(row.preview,x,33,width-x-8,19,row)

@@ -435,6 +435,16 @@ function Store:IndexOf(key, id)
     return index and index[tostring(id or '')] or nil
 end
 
+-- Removes one message by id and returns it, or nil when it does not exist.
+function Store:RemoveMessage(key, id)
+    local conversation = self:Get(key); if not conversation then return nil end
+    local at = self:IndexOf(conversation.key, id); if not at then return nil end
+    local removed = table.remove(conversation.messages, at)
+    indexConversation(self, conversation)
+    notify(self, 'clear', conversation.key)
+    return removed
+end
+
 -- What is known about a sender. One entry per person instead of a copy on every message.
 function Store:Person(name)
     if type(name) ~= 'string' or name == '' then return nil end
