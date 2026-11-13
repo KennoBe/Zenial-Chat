@@ -20,6 +20,7 @@ local defaults = {
     searchHistoryEnabled = false,
     retentionCount = 0, retentionDays = 0,
     toastDuration = 5, suppressInCombat = false,
+    xfChatHint = true,
 }
 local enumerations = {
     nameFormat = { full = true, first = true, last = true, initialLast = true, firstInitial = true, initials = true },
@@ -80,7 +81,7 @@ local function applyDefaults(settings)
     end
     local booleanKeys = { 'previews', 'locked', 'focusOnOpen', 'autoOpen', 'publicChannels', 'minimapHidden',
         'classColors', 'dateSeparators', 'sidebarCompact', 'groupMessages', 'urlLinks', 'inputHistory',
-        'rememberScroll', 'fadeEnabled', 'searchHistoryEnabled', 'suppressInCombat' }
+        'rememberScroll', 'fadeEnabled', 'searchHistoryEnabled', 'suppressInCombat', 'xfChatHint' }
     for _, key in ipairs(booleanKeys) do
         if type(settings[key]) ~= 'boolean' then settings[key] = defaults[key] end
     end

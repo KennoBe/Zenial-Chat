@@ -138,6 +138,9 @@ local function buildSpecs()
             if text then U.ShowCopy(text,Z.L('Wortpaare für GarbleData.lua · Strg+C','Word pairs for GarbleData.lua · Ctrl+C'),true)
             else U.Notice(Z.L('Noch kein Ergebnis.','No result yet.'))end
         end})
+        add('section',Z.L('Übersetzungshinweis','Translation hint'))
+        add('check',Z.L('Übersetzungshinweis im Chat anzeigen','Show translation hint in chat'),{key='xfChatHint'})
+        add('note',Z.L('Der Hinweis erscheint erst, wenn die Client-Unterstützung bestätigt ist.','The hint appears only once client support has been confirmed.'))
     elseif U.settingsPage=='notifications'then
         add('section',Z.L('Neue Nachrichten','New messages'))
         add('note',Z.L('Stummgeschaltete Gespräche behalten ihren Ungelesen-Zähler, spielen aber keinen Ton und zeigen keinen Hinweis.','Muted conversations keep unread counts, but do not play a sound or show a notification.'))

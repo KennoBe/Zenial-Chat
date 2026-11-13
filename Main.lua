@@ -18,7 +18,7 @@ frame:SetScript('OnEvent',function(_,event,...)
     if event=='PLAYER_LOGIN'then pcall(Z.CommunityBridge.Connect)end
     local c,row,added
     if Z.Opposite.handles[event]then c,row,added=Z.Opposite.OnEvent(event,...);if Z.Calibration then pcall(Z.Calibration.OnEvent,event,...)end else c,row,added=Z.adapter:OnEvent(event,...)end
-    if event=='PLAYER_LOGIN'then Z.adapter:RefreshIdentity();Z.UI.CreateMinimapButton();Z.NativeChat.Initialize()end
+    if event=='PLAYER_LOGIN'then Z.adapter:RefreshIdentity();Z.UI.CreateMinimapButton();Z.NativeChat.Initialize();if Z.ChatHint then pcall(Z.ChatHint.Initialize)end end
     Z.Notifications.Incoming(c,row,added)
     Z.UI.RequestRefresh(event,c and c.key)
 end)

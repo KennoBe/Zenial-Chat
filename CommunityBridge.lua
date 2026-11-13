@@ -3,6 +3,21 @@
 local _,Z=...
 local B={active=false,version=0};Z.CommunityBridge=B
 local OWNER='ZenialChat'
+-- lineID -> id of the decoded entry that replaced the raw line, for the click on a hint. Newest 200 only.
+B.replaced={}
+local replacedOrder,REPLACED_LIMIT={},200
+local function remember(lineID,id)
+    local key=tostring(lineID)
+    if B.replaced[key]==nil then
+        replacedOrder[#replacedOrder+1]=key
+        if #replacedOrder>REPLACED_LIMIT then B.replaced[table.remove(replacedOrder,1)]=nil end
+    end
+    B.replaced[key]=id
+end
+function B.Replacement(lineID)
+    if lineID==nil then return nil end
+    return B.replaced[tostring(lineID)]
+end
 local function now()return Z.Now and Z.Now()or time and time()or 0 end
 -- The other side's API table, only when it is the version this bridge was written for.
 local function remote()
@@ -70,6 +85,9 @@ local function onMessage(p)
     end
     local visible=Z.IsVisibleAtEnd and Z.IsVisibleAtEnd(c.key)or false
     local msg,added=store:Append(c,row,visible)
+    if not outgoing and msg and type(p.lineIDs)=='table'then
+        for _,lineID in ipairs(p.lineIDs)do remember(lineID,id)end
+    end
     if not outgoing and Z.Notifications and added then pcall(Z.Notifications.Incoming,c,msg,added)end
 end
 local function listener(event,payload)

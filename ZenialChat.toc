@@ -15,6 +15,7 @@ Layout.lua
 Adapter.lua
 Opposite.lua
 CommunityBridge.lua
+ChatHint.lua
 PhraseCodec.lua
 PhraseTables.lua
 LanguageWords.lua
