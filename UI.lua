@@ -240,6 +240,7 @@ function U.ConversationMenu(anchor,c)
         end},
         {text=c.notify=='always'and Z.L('Hinweise: nach Chatart','Alerts: by chat type')or Z.L('Hinweise: immer','Alerts: always'),run=function()Z.store:SetNotify(c.key,c.notify~='always'and'always'or nil)end},
         {text=Z.L('Verlauf exportieren …','Export history …'),run=function()U.ExportConversation(c)end},
+        {text=Z.L('Phrasen für die Gegenfraktion','Phrases for the other faction'),run=function()Z.Opposite.OpenPhrases()end},
     })
 end
 -- Addons have no clipboard access: copying means the selected text in the copy window plus Ctrl+C.

@@ -26,6 +26,13 @@ function O.Speaks(languageName)
     return found
 end
 function O.Reset()spoken=nil end
+-- Opens the phrase popup. channel 'SAY'|'YELL'|nil marks the preferred send button. Never raises, never sends.
+function O.OpenPhrases(channel)
+    if channel~='SAY'and channel~='YELL'then channel=nil end
+    local ui=Z.PhraseUI
+    if type(ui)~='table'or type(ui.Open)~='function'then return false end
+    return(pcall(ui.Open,channel))
+end
 local function handle(event,...)
     local channel=O.handles[event];if not channel then return end
     local adapter,store=Z.adapter,Z.store;if not adapter or not store then return end

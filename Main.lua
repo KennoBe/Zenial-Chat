@@ -5,6 +5,7 @@ SLASH_ZENIALCHAT1='/zchat';SLASH_ZENIALCHAT2='/zenialchat'
 SlashCmdList.ZENIALCHAT=function(text)
     text=type(text)=='string'and text:match('^%s*(.-)%s*$')or''
     if text=='settings'or text=='config'or text=='einstellungen'then Z.UI.OpenSettings('appearance')
+    elseif text=='phrases'then Z.Opposite.OpenPhrases()
     else Z.UI.Toggle()end
 end
 local frame=CreateFrame('Frame');Z.eventFrame=frame

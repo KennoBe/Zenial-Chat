@@ -30,6 +30,7 @@ Theme.lua
 Transcript.lua
 UI.lua
 SearchUI.lua
+PhraseUI.lua
 Options.lua
 NativeChatOptions.lua
 Notifications.lua
