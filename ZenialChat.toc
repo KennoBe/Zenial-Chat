@@ -13,6 +13,9 @@ Format.lua
 Search.lua
 Layout.lua
 Adapter.lua
+PhraseCodec.lua
+PhraseData.lua
+Phrases.lua
 NativeChat.lua
 NativeChatUnread.lua
 Theme.lua
