@@ -16,6 +16,7 @@ Adapter.lua
 Opposite.lua
 PhraseCodec.lua
 PhraseTables.lua
+LanguageWords.lua
 PhraseData.lua
 Phrases.lua
 InterpretData.lua

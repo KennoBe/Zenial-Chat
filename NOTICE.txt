@@ -1,0 +1,22 @@
+Zenial Chat - Third-party data notice
+
+Affected file: LanguageWords.lua
+
+The word lists in LanguageWords.lua (nonsense words of the game languages
+Orcish and Common, grouped by word length) are taken from the Warcraft Wiki:
+
+  https://warcraft.wiki.gg/wiki/Orcish_(language)
+  https://warcraft.wiki.gg/wiki/Common_(language)
+
+Retrieved: 2026-11-13
+Source: Warcraft Wiki (warcraft.wiki.gg)
+License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+         https://creativecommons.org/licenses/by-sa/4.0/
+Changes: words converted to lowercase and written as Lua tables; spelling and
+         order as on the wiki.
+
+The word lists are game data of Blizzard Entertainment.
+
+LanguageWords.lua is licensed under CC BY-SA 4.0 and not under the MIT license
+of the rest of this addon. Redistributions of that file, or of adaptations of
+it, must keep this notice and use the same license.
