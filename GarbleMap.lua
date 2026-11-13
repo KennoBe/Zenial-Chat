@@ -96,9 +96,9 @@ function G.Candidates(languageId,fakeWord)
     local db=root()
     local learned=db and type(db.learned)=='table'and db.learned[languageId]
     if type(learned)=='table'then
-        for key,meaning in pairs(learned)do
-            if type(key)=='string'and type(meaning)=='string'and meaning~=''and fold(key)==fake then add(meaning,'learned')end
-        end
+        -- keys are stored folded (Interpret.Learn), so a direct lookup is enough
+        local meaning=learned[fake]
+        if type(meaning)=='string'and meaning~=''then add(meaning,'learned')end
     end
     local build=G.CurrentBuild()
     local entry=index[languageId]

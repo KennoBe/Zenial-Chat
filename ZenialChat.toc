@@ -15,11 +15,13 @@ Layout.lua
 Adapter.lua
 Opposite.lua
 PhraseCodec.lua
+PhraseTables.lua
 PhraseData.lua
 Phrases.lua
 InterpretData.lua
 GarbleData.lua
 GarbleMap.lua
+Interpret.lua
 NativeChat.lua
 NativeChatUnread.lua
 Theme.lua
