@@ -98,6 +98,46 @@ local function buildSpecs()
             end
             if#channels==0 then add('note',Z.L('Noch keine beigetretenen Kanäle verfügbar.','No joined channels available yet.'))end
         end
+        add('section',Z.L('Kalibrierung','Calibration'))
+        add('note',Z.L('Für Spieler der anderen Fraktion: Ein Mitspieler dieser Fraktion mit Zenial Chat steht in Sagen-Reichweite. Jeder Klick sendet genau eine Zeile.','For the other faction: a player of that faction with Zenial Chat stands within say range. Each click sends exactly one line.'))
+        add('note',(Z.Calibration.StatusText(Z.Calibration.OwnLanguageId())))
+        add('action',Z.L('Probe senden','Send probe'),{run=function()
+            local ok,code=Z.Calibration.SendNextProbe()
+            if ok then U.Notice(Z.L('Probe gesendet.','Probe sent.'))
+            elseif code=='done'then Z.Calibration.ResetSender();U.Notice(Z.L('Alle Proben gesendet. Der nächste Klick beginnt von vorn.','All probes sent. The next click starts over.'))
+            else U.Notice(Z.L('Probe konnte nicht gesendet werden.','The probe could not be sent.'))end
+        end})
+        add('action',Z.L('Zuhören (Ziel)','Listen (target)'),{run=function()
+            if Z.Calibration.ListenTarget(false)then U.Notice(Z.L('Höre dem Ziel zu (10 Minuten).','Listening to the target (10 minutes).'))
+            else U.Notice(Z.L('Wähle zuerst einen Spieler als Ziel.','Target a player first.'))end
+        end})
+        add('action',Z.L('Ergebnis exportieren','Export result'),{run=function()
+            local code=Z.Calibration.ExportCode()
+            if code then U.ShowCopy(code,Z.L('Kalibrierung für den Sender · Strg+C','Calibration for the sender · Ctrl+C'))
+            else U.Notice(Z.L('Noch kein Ergebnis.','No result yet.'))end
+        end})
+        add('action',Z.L('Code importieren','Import code'),{run=function()
+            U.Prompt(Z.L('Kalibrierungscode einfügen · Enter','Paste calibration code · Enter'),'',function(value)
+                local ok=Z.Calibration.Import(value)
+                U.Notice(ok and Z.L('Tabelle importiert.','Table imported.')or Z.L('Der Code ist ungültig.','The code is invalid.'))
+                U.RebuildOptions()
+            end)
+        end})
+        add('action',Z.L('Wortprobe senden','Send word probe'),{run=function()
+            local ok,code=Z.Calibration.SendNextWordProbe()
+            if ok then U.Notice(Z.L('Wortprobe gesendet.','Word probe sent.'))
+            elseif code=='done'then Z.Calibration.ResetSender();U.Notice(Z.L('Alle Wortproben gesendet. Der nächste Klick beginnt von vorn.','All word probes sent. The next click starts over.'))
+            else U.Notice(Z.L('Wortprobe konnte nicht gesendet werden.','The word probe could not be sent.'))end
+        end})
+        add('action',Z.L('Wortproben zuhören (Ziel)','Listen for word probes (target)'),{run=function()
+            if Z.Calibration.ListenTarget(true)then U.Notice(Z.L('Höre dem Ziel zu (10 Minuten).','Listening to the target (10 minutes).'))
+            else U.Notice(Z.L('Wähle zuerst einen Spieler als Ziel.','Target a player first.'))end
+        end})
+        add('action',Z.L('Wortproben-Ergebnis exportieren','Export word probe result'),{run=function()
+            local text=Z.Calibration.ExportWords()
+            if text then U.ShowCopy(text,Z.L('Wortpaare für GarbleData.lua · Strg+C','Word pairs for GarbleData.lua · Ctrl+C'),true)
+            else U.Notice(Z.L('Noch kein Ergebnis.','No result yet.'))end
+        end})
     elseif U.settingsPage=='notifications'then
         add('section',Z.L('Neue Nachrichten','New messages'))
         add('note',Z.L('Stummgeschaltete Gespräche behalten ihren Ungelesen-Zähler, spielen aber keinen Ton und zeigen keinen Hinweis.','Muted conversations keep unread counts, but do not play a sound or show a notification.'))
