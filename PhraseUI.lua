@@ -22,6 +22,7 @@ local errorTexts={
     no_table=function()return L('Keine Zeichentabelle für deine Sprache.','No character table for your language.')end,
     invalid_chars=function()return L('Nur die Buchstaben A–Z und Leerzeichen sind erlaubt.','Only the letters A-Z and spaces are allowed.')end,
     too_long=function()return L('Die buchstabierte Phrase ist zu lang.','The spelled phrase is too long.')end,
+    invalid_table=function()return L('Die Zeichentabelle enthält ungültige Zeichen. Kalibriere neu oder importiere einen anderen Code.','The character table contains invalid characters. Calibrate again or import another code.')end,
     limit=function()return L('Zu viele eigene Vorlagen.','Too many own templates.')end,
     all_missing=function()return L('Alle Buchstaben fehlen in der Zeichentabelle, es wird nichts gesendet.','All letters are missing from the character table; nothing is sent.')end,
 }

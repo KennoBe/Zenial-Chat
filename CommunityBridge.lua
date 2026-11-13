@@ -71,12 +71,13 @@ local function onMessage(p)
         local parts,language={},nil
         if type(p.lineIDs)=='table'then
             for _,lineID in ipairs(p.lineIDs)do
-                local at=store:IndexOf(c.key,'xf:'..tostring(lineID))
+                local rawId=Z.Opposite and Z.Opposite.MessageIdForLine and Z.Opposite.MessageIdForLine(lineID)
+                local at=rawId and store:IndexOf(c.key,rawId)
                 local old=at and c.messages[at]
                 if old then
                     if type(old.text)=='string'and old.text~=''then parts[#parts+1]=old.text end
                     if not language and type(old.language)=='string'and old.language~=''then language=old.language end
-                    store:RemoveMessage(c.key,'xf:'..tostring(lineID))
+                    store:RemoveMessage(c.key,rawId)
                 end
             end
         end

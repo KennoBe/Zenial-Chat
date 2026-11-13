@@ -127,7 +127,8 @@ end
 function U.Open()
     if not Z.ready then Z.Initialize()end
     U.Build();U.frame:Show();U.Layout();U.Refresh()
-    if Z.store.settings.focusOnOpen and selected()and not U.settingsPanel:IsShown()then U.input:SetFocus()end
+    local c=selected()
+    if Z.store.settings.focusOnOpen and c and c.kind~='XFACTION'and not U.settingsPanel:IsShown()then U.input:SetFocus()end
 end
 function U.Toggle()
     if U.frame and U.frame:IsShown()then U.frame:Hide()else U.Open()end
@@ -212,7 +213,7 @@ function U.Prompt(title,text,fn)
 end
 -- Puts a quote at the cursor. Nothing is sent until the user does it.
 function U.QuoteMessage(msg,mode)
-    local c=selected();if not c or not msg or msg.deleted then return end
+    local c=selected();if not c or c.kind=='XFACTION'or not msg or msg.deleted then return end
     U.input:SetFocus();U.input:Insert(Z.Format.Quote(c,msg,mode))
 end
 function U.OpenWhisper(name)
@@ -255,10 +256,10 @@ function U.MessageMenu(anchor,msg)
     local function add(label,run)items[#items+1]={text=label,run=run}end
     add(Z.L('Mit Absender kopieren','Copy with sender'),function()U.ShowCopy(Z.Format.MessageLine(c,msg,'sender'))end)
     add(Z.L('Mit Zeit und Absender kopieren','Copy with time and sender'),function()U.ShowCopy(Z.Format.MessageLine(c,msg,'time'))end)
-    add(Z.L('Zitieren','Quote'),function()U.QuoteMessage(msg)end)
+    if c.kind~='XFACTION'then add(Z.L('Zitieren','Quote'),function()U.QuoteMessage(msg)end)end
     -- Character actions only for a real character name; a Battle.net account has its own native menu.
     if name~=''and not msg.outgoing and c.kind~='BN_WHISPER'then
-        if c.kind~='WHISPER'then add(Z.L('Anflüstern','Whisper'),function()U.OpenWhisper(name)end)end
+        if c.kind~='WHISPER'and c.kind~='XFACTION'then add(Z.L('Anflüstern','Whisper'),function()U.OpenWhisper(name)end)end
         local invite=C_PartyInfo and C_PartyInfo.InviteUnit
         if type(invite)=='function'then add(Z.L('In Gruppe einladen','Invite to group'),function()Z.Call(invite,name)end)end
     end

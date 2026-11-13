@@ -3,9 +3,12 @@
 -- License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). The word lists are game data of Blizzard Entertainment.
 -- This file is licensed under CC BY-SA 4.0 and NOT under the MIT license of the rest of the addon (see NOTICE.txt).
 -- Changes: words folded to lowercase (ASCII); order and spelling (apostrophes, one hyphen) kept as on the wiki.
+-- Also here: W.PUBLIC_PAIRS, three single garble pairs listed on the same wiki pages (Orcish lol -> kek, bur -> lok; Common lol -> bur).
 -- Format: [languageId]={name=,words={[length]={word,...}}}; Orcish = 1, Common = 7; length counts characters including ' and -.
 local _,Z=...
 local W={};Z.LanguageWords=W
+-- languageId -> { garbledWord = sourceWord }; read by GarbleMap at run time.
+W.PUBLIC_PAIRS={[1]={kek='lol',lok='bur'},[7]={bur='lol'}}
 W.DATA={
     [1]={name='Orcish',words={
             [1]={'a','n','g','o','l'},

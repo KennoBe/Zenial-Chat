@@ -10,6 +10,31 @@ local function root()
     local db=Z.store and Z.store.db or _G.ZenialChatDB
     return type(db)=='table'and db or nil
 end
+-- One entry (a letter or the separator) must be exactly one valid UTF-8 character that is safe to send: no pipe,
+-- no control character, no white space. Anything else could break a chat line or hide what the receiver reads.
+local SPACES={[0x85]=true,[0xA0]=true,[0x1680]=true,[0x2028]=true,[0x2029]=true,[0x202F]=true,[0x205F]=true,[0x3000]=true}
+local function validEntry(value)
+    if type(value)~='string'or value==''or#value>4 then return false end
+    if value:find('[%z\1-\31\127|%s]')then return false end
+    local b1=value:byte(1)
+    local length,code
+    if b1<0x80 then length,code=1,b1
+    elseif b1>=0xC2 and b1<=0xDF then length,code=2,b1-0xC0
+    elseif b1>=0xE0 and b1<=0xEF then length,code=3,b1-0xE0
+    elseif b1>=0xF0 and b1<=0xF4 then length,code=4,b1-0xF0
+    else return false end
+    if#value~=length then return false end
+    for i=2,length do
+        local b=value:byte(i)
+        if b<0x80 or b>0xBF then return false end
+        code=code*64+(b-0x80)
+    end
+    if length==3 and(code<0x800 or(code>=0xD800 and code<=0xDFFF))then return false end
+    if length==4 and(code<0x10000 or code>0x10FFFF)then return false end
+    if SPACES[code]or(code>=0x2000 and code<=0x200A)then return false end
+    return true
+end
+C.ValidEntry=validEntry
 local function alphabet()
     local list={};for i=0,25 do list[#list+1]=string.char(65+i)end
     return list
@@ -19,8 +44,10 @@ local function absent(tbl)
     local missing,letters={},type(tbl)=='table'and type(tbl.letters)=='table'and tbl.letters or{}
     for _,letter in ipairs(alphabet())do
         local value=letters[letter]
-        if type(value)~='string'or value==''then missing[#missing+1]=letter end
+        if not validEntry(value)then missing[#missing+1]=letter end
     end
+    local separator=type(tbl)=='table'and tbl.separator
+    if type(separator)=='string'and separator~=''and not validEntry(separator)then missing[#missing+1]='_'end
     return missing
 end
 -- A user table with the matching build wins over a bundled one with the matching build, which wins over a user
@@ -50,6 +77,11 @@ function C.Encode(phrase,tbl)
     if phrase==''then return nil,'empty'end
     if phrase:find('[^A-Z ]')then return nil,'invalid_chars'end
     local separator=type(tbl.separator)=='string'and tbl.separator~=''and tbl.separator or nil
+    if separator and not validEntry(separator)then return nil,'invalid_table'end
+    for letter in phrase:gmatch('[A-Z]')do
+        local value=tbl.letters[letter]
+        if type(value)=='string'and value~=''and not validEntry(value)then return nil,'invalid_table'end
+    end
     local tokens,preview,missing,seen,words={},{},{},{},{}
     for word in phrase:gmatch('%S+')do words[#words+1]=word end
     for index,word in ipairs(words)do
@@ -68,7 +100,7 @@ function C.Encode(phrase,tbl)
     end
     local text=table.concat(tokens,' ')
     if #text>C.MAX_BYTES then return nil,'too_long'end
-    return{text=text,preview=table.concat(preview,' '),missing=missing,bytes=#text}
+    return{text=text,preview=table.concat(preview,separator and' 'or''),missing=missing,bytes=#text}
 end
 local function chars(word)
     local count=0
@@ -79,13 +111,22 @@ end
 -- joined, upper-cased. The line is not mapped back through a table.
 function C.Despell(text)
     if not Z.Safe(text)or type(text)~='string'then return nil end
-    local total,singles,picked=0,0,{}
+    local total,singles,out,gap=0,0,{},false
     for word in text:gmatch('%S+')do
         total=total+1
-        if chars(word)==1 then singles=singles+1;picked[#picked+1]=word end
+        if chars(word)==1 then
+            singles=singles+1
+            if word:find('^[a-z]$')then gap=#out>0
+            else
+                if gap then out[#out+1]=' ';gap=false end
+                out[#out+1]=word
+            end
+        end
     end
     if total<3 or singles*10<total*7 then return nil end
-    return table.concat(picked):upper()
+    local result=table.concat(out):upper()
+    if result==''then return nil end
+    return result
 end
 local function hex(value)return(value:gsub('.',function(c)return string.format('%02X',c:byte())end))end
 local function unhex(value)
@@ -115,7 +156,7 @@ function C.Import(code,currentBuild)
     for part in body:gmatch('[^,]+')do
         local key,value=part:match('^(.)=(%x+)$')
         value=value and unhex(value)
-        if not value or#value>MAX_INPUT then return nil,'format'end
+        if not value or#value>MAX_INPUT or not validEntry(value)then return nil,'format'end
         if key=='_'then separator=value
         elseif key:match('^[A-Z]$')and not letters[key]then letters[key]=value;count=(count or 0)+1
         else return nil,'format'end

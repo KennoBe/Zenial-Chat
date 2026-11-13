@@ -12,8 +12,9 @@ local routes={}
 local lastLink,lastAt
 local function safeCall(fn,...)local ok,value=pcall(fn,...);if ok then return value end end
 local function build()
-    if type(GetBuildInfo)~='function'then return nil end
-    local ok,value=pcall(function()return(select(4,GetBuildInfo()))end)
+    local G=Z.GarbleMap
+    if type(G)~='table'or type(G.CurrentBuild)~='function'then return nil end
+    local ok,value=pcall(G.CurrentBuild)
     return ok and value or nil
 end
 local function routeCount()
@@ -51,7 +52,7 @@ local function compute(...)
     if type(O.skip)=='function'then
         local ok,skipped=pcall(O.skip,text);if ok and skipped then return nil end
     end
-    if O.Speaks(language)then return nil end
+    if not O.IsOppositeLanguage(language)then return nil end
     return text..hintText(string.format('%d',line))
 end
 -- Chat filter: never hides a line. Returns false (unchanged) or false plus all original arguments with arg1 replaced.
@@ -67,17 +68,17 @@ function H.OnLink(link)
     if not lineID then return false end
     local O=Z.Opposite
     if type(O)~='table'or type(O.OpenMessage)~='function'then return false end
-    local id='xf:'..lineID
+    local id=type(O.MessageIdForLine)=='function'and safeCall(O.MessageIdForLine,lineID)or nil
     local store,me=Z.store,Z.adapter and Z.adapter.me
     local present=false
-    if store and me and me.realm and me.realm~=''and me.faction and me.faction~=''then
+    if id and store and me and me.realm and me.realm~=''and me.faction and me.faction~=''then
         local key=Z.Store.Key({kind='XFACTION',scope=me.realm,target=me.faction})
         present=safeCall(store.IndexOf,store,key,id)~=nil
     end
     if not present then
         local bridge=Z.CommunityBridge
         local replaced=type(bridge)=='table'and type(bridge.Replacement)=='function'and safeCall(bridge.Replacement,lineID)
-        if type(replaced)=='string'and replaced~=''then id=replaced end
+        if type(replaced)=='string'and replaced~=''then id=replaced else id=nil end
     end
     pcall(O.OpenMessage,id)
     return true

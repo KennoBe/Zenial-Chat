@@ -1,13 +1,11 @@
 -- Reverse lookup garbled word -> candidate source words for one language. Pure logic, no UI.
 -- Sources in fixed order: learned (user corrections in ZenialChatDB.learned[language][fakeWord] = meaning),
 -- measured (Z.GarbleData), computed (optional Z.GarbleComputed, same format; no data yet), public (single pairs below).
--- Public pairs: Warcraft Wiki (warcraft.wiki.gg), pages Orcish (language) and Common (language), CC BY-SA 4.0.
+-- Public pairs: Z.LanguageWords.PUBLIC_PAIRS (source and license are named in LanguageWords.lua and NOTICE.txt).
 local _,Z=...
 local G={};Z.GarbleMap=G
 G.MAX_ENTRIES=4000
 local sourceOrder={learned=1,measured=2,computed=3,public=4}
--- language ID -> { garbled = word }; Orcish = 1, Common = 7
-local PUBLIC={[1]={kek='lol',lok='bur'},[7]={bur='lol'}}
 local index={} -- language -> { build=, map={fake={ {word,rank,source} }}, count= }
 local rankOf
 
@@ -27,11 +25,11 @@ local function root()
     local db=Z.store and Z.store.db or _G.ZenialChatDB
     return type(db)=='table'and db or nil
 end
--- Current client build (fourth return of GetBuildInfo); nil when unknown. Replaceable for tests.
+-- Current client build number (second return of GetBuildInfo, not the interface version); nil when unknown. Replaceable for tests.
 function G.CurrentBuild()
     local info=_G.GetBuildInfo
     if type(info)~='function'then return nil end
-    local ok,build=pcall(function()return(select(4,info()))end)
+    local ok,build=pcall(function()return(select(2,info()))end)
     return ok and tonumber(build)or nil
 end
 function G.Reset()index={};rankOf=nil end
@@ -78,7 +76,8 @@ function G.Build(languageId,build)
     end
     addList(Z.GarbleData,'measured')
     addList(Z.GarbleComputed,'computed')
-    for fake,word in pairs(PUBLIC[languageId]or{})do add(fake,word,'public')end
+    local pub=Z.LanguageWords and Z.LanguageWords.PUBLIC_PAIRS
+    for fake,word in pairs(type(pub)=='table'and pub[languageId]or{})do add(fake,word,'public')end
     entry.seen=nil
     for _,list in pairs(entry.map)do sortCandidates(list)end
 end

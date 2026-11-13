@@ -26,6 +26,41 @@ function O.Speaks(languageName)
     return found
 end
 function O.Reset()spoken=nil end
+-- Language names of each faction (English and German), compared with ASCII folding. A line in one of the player's
+-- own faction languages is never an opposite-faction line, whatever the character happens to speak.
+local OWN_LANGUAGES={
+    Alliance={'common','gemeinsprache','darnassian','darnassisch','dwarvish','zwergisch','gnomish','gnomisch','draenei','draeneiisch'},
+    Horde={'orcish','orcisch','taurahe','taurisch','zandali','trollisch','troll','gutterspeak','forsaken','gossensprache','thalassian','thalassisch'},
+}
+local ownSets={}
+for faction,list in pairs(OWN_LANGUAGES)do
+    local set={};for _,name in ipairs(list)do set[name]=true end
+    ownSets[faction]=set
+end
+local function fold(text)return(text:gsub('%u',function(c)return string.char(c:byte()+32)end))end
+-- True for a named language that the character does not speak and that does not belong to the own faction.
+function O.IsOppositeLanguage(languageName)
+    if type(languageName)~='string'or languageName==''then return false end
+    if O.Speaks(languageName)then return false end
+    local faction=Z.adapter and Z.adapter.me and Z.adapter.me.faction
+    local own=faction and ownSets[faction]
+    if own and own[fold(languageName)]then return false end
+    return true
+end
+-- lineID -> stored message id, this session only (ids carry the session, line ids restart with every client start).
+local lineIds,lineOrder,LINE_LIMIT={},{},200
+local function rememberLine(line,id)
+    local key=tostring(line)
+    if lineIds[key]==nil then
+        lineOrder[#lineOrder+1]=key
+        if #lineOrder>LINE_LIMIT then lineIds[table.remove(lineOrder,1)]=nil end
+    end
+    lineIds[key]=id
+end
+function O.MessageIdForLine(lineID)
+    if lineID==nil then return nil end
+    return lineIds[tostring(lineID)]
+end
 -- Opens the phrase popup. channel 'SAY'|'YELL'|nil marks the preferred send button. Never raises, never sends.
 function O.OpenPhrases(channel)
     if channel~='SAY'and channel~='YELL'then channel=nil end
@@ -62,12 +97,14 @@ local function handle(event,...)
     if type(O.skip)=='function'then
         local ok,skipped=pcall(O.skip,text);if ok and skipped then return end
     end
-    if O.Speaks(language)then return end
+    if not O.IsOppositeLanguage(language)then return end
     local c=store:Ensure({kind='XFACTION',name=Z.L('Gegnerische Fraktion','Opposite faction'),scope=me.realm,target=me.faction})
     if not c then return end
-    local row={id='xf:'..tostring(line),at=now(),sender=sender,senderGuid=guid and guid:match('^Player%-')and guid or nil,
+    local id='xf:'..tostring(adapter.session or'0')..':'..string.format('%d',line)
+    local row={id=id,at=now(),sender=sender,senderGuid=guid and guid:match('^Player%-')and guid or nil,
         channel=channel,language=language,text=text,reading='unknown',meaning=nil}
     local msg,added=store:Append(c,row,Z.IsVisibleAtEnd and Z.IsVisibleAtEnd(c.key)or false)
+    if msg then rememberLine(line,id)end
     return c,msg,added
 end
 -- Never raises: the original chat event is untouched either way.

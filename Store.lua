@@ -440,7 +440,19 @@ end
 function Store:RemoveMessage(key, id)
     local conversation = self:Get(key); if not conversation then return nil end
     local at = self:IndexOf(conversation.key, id); if not at then return nil end
-    local removed = table.remove(conversation.messages, at)
+    local messages = conversation.messages
+    -- Unread messages are the newest incoming ones: this one was unread when fewer incoming messages follow it than are counted.
+    local wasUnread = false
+    local candidate = messages[at]
+    if candidate.outgoing ~= true and candidate.context ~= true and (tonumber(conversation.unread) or 0) > 0 then
+        local after = 0
+        for i = at + 1, #messages do
+            if messages[i].outgoing ~= true and messages[i].context ~= true then after = after + 1 end
+        end
+        wasUnread = after < conversation.unread
+    end
+    local removed = table.remove(messages, at)
+    if wasUnread then conversation.unread = math.max(0, conversation.unread - 1) end
     indexConversation(self, conversation)
     notify(self, 'clear', conversation.key)
     return removed
