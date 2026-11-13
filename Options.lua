@@ -98,6 +98,8 @@ local function buildSpecs()
             end
             if#channels==0 then add('note',Z.L('Noch keine beigetretenen Kanäle verfügbar.','No joined channels available yet.'))end
         end
+        -- Absent while a running client has not yet picked up the new TOC files (update without restart).
+        if Z.Calibration then
         add('section',Z.L('Kalibrierung','Calibration'))
         add('note',Z.L('Für Spieler der anderen Fraktion: Ein Mitspieler dieser Fraktion mit Zenial Chat steht in Sagen-Reichweite. Jeder Klick sendet genau eine Zeile.','For the other faction: a player of that faction with Zenial Chat stands within say range. Each click sends exactly one line.'))
         add('note',(Z.Calibration.StatusText(Z.Calibration.OwnLanguageId())))
@@ -138,6 +140,7 @@ local function buildSpecs()
             if text then U.ShowCopy(text,Z.L('Wortpaare für GarbleData.lua · Strg+C','Word pairs for GarbleData.lua · Ctrl+C'),true)
             else U.Notice(Z.L('Noch kein Ergebnis.','No result yet.'))end
         end})
+        end
         add('section',Z.L('Übersetzungshinweis','Translation hint'))
         add('check',Z.L('Übersetzungshinweis im Chat anzeigen','Show translation hint in chat'),{key='xfChatHint'})
         add('note',Z.L('Der Hinweis erscheint erst, wenn die Client-Unterstützung bestätigt ist.','The hint appears only once client support has been confirmed.'))
