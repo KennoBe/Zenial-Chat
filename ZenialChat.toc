@@ -17,6 +17,9 @@ Opposite.lua
 PhraseCodec.lua
 PhraseData.lua
 Phrases.lua
+InterpretData.lua
+GarbleData.lua
+GarbleMap.lua
 NativeChat.lua
 NativeChatUnread.lua
 Theme.lua
