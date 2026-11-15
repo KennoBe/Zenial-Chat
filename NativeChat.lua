@@ -64,10 +64,9 @@ function N.InCombat()
     if type(InCombatLockdown)~='function'then return true end
     local ok,value=pcall(InCombatLockdown);return not ok or not Z.Safe(value)or value~=false
 end
+-- ZENIAL UI's chat module owns the look of the chat windows; while it runs, the native look options are not applied.
+function N.ZenialUIStyles()return ZenialUI~=nil and type(ZenialUI.ModuleEnabled)=='function'and Z.Call(ZenialUI.ModuleEnabled,'chat')==true end
 function N.Conflict()
-    if ZenialUI and type(ZenialUI.ModuleEnabled)=='function'and Z.Call(ZenialUI.ModuleEnabled,'chat')then
-        return Z.L('ZENIAL UI verwaltet bereits den Blizzard-Chat. Deaktiviere dort zuerst das Chat-Modul.','ZENIAL UI already manages Blizzard chat. Disable its chat module first.')
-    end
     for _,addon in ipairs({'Prat-3.0','Chatter','ElvUI','Chattynator','Glass','LS_Glass'})do
         if C_AddOns and Z.Call(C_AddOns.IsAddOnLoaded,addon)then return Z.L('Ein anderes Chat-Addon ist aktiv: ','Another chat addon is active: ')..addon end
     end
@@ -267,7 +266,7 @@ function N.Preview(mode,options)
                 end
                 if #e.added==0 and #e.removed==0 then lines[#lines+1]='  '..Z.L('Nachrichtenarten bleiben unverändert.','Message types stay unchanged.')end
                 if #t.channels>0 then lines[#lines+1]='  '..Z.L('Kanäle: ','Channels: ')..table.concat(t.channels,', ')end
-                if e.create and t.fontSize then lines[#lines+1]='  '..string.format(Z.L('Schriftgröße %d wie %s','Font size %d, same as %s'),t.fontSize,generalName)end
+                if e.create and t.fontSize and not N.ZenialUIStyles()then lines[#lines+1]='  '..string.format(Z.L('Schriftgröße %d wie %s','Font size %d, same as %s'),t.fontSize,generalName)end
                 p.rows[#p.rows+1]=table.concat(lines,'\n')
             end
             p.cvars=desiredCvars(p.prefs)
@@ -290,7 +289,7 @@ function N.Preview(mode,options)
             display[#display+1]='  '..Z.L('Ungelesen-Zähler an: ','Unread counters on: ')..(#on>0 and table.concat(on,', ')or'—')
             if #off>0 then display[#display+1]='  '..Z.L('Ungelesen-Zähler aus: ','Unread counters off: ')..table.concat(off,', ')end
         else display[#display+1]='  '..Z.L('Ungelesen-Zähler: aus','Unread counters: off')end
-        display[#display+1]='  '..string.format(Z.L('Kompakte Tab-Schrift: %s · Zusätzliche Buttons ausblenden: %s · Hintergründe ausblenden: %s','Compact tab text: %s · Hide extra buttons: %s · Hide backgrounds: %s'),yes(p.prefs.compactTabs),yes(p.prefs.hideButtons),yes(p.prefs.hideBackground))
+        if not N.ZenialUIStyles()then display[#display+1]='  '..string.format(Z.L('Kompakte Tab-Schrift: %s · Zusätzliche Buttons ausblenden: %s · Hintergründe ausblenden: %s','Compact tab text: %s · Hide extra buttons: %s · Hide backgrounds: %s'),yes(p.prefs.compactTabs),yes(p.prefs.hideButtons),yes(p.prefs.hideBackground))end
         p.rows[#p.rows+1]=table.concat(display,'\n')
         if p.mode=='setup'then
             p.rows[#p.rows+1]=Z.L('Allgemein bleibt unverändert; Nachrichten erscheinen dort weiterhin entsprechend deiner bisherigen Konfiguration.','General stays unchanged; messages continue to appear there according to your existing configuration.')
@@ -312,7 +311,7 @@ local function applyWindow(w)
         if opened~=f then error('Native window allocation changed; preview again')end
     end
     -- Optional cosmetic step: a missing or failing font API never blocks routing.
-    if w.create and w.fontSize and type(FCF_SetChatWindowFontSize)=='function'then pcall(FCF_SetChatWindowFontSize,nil,f,w.fontSize)end
+    if w.create and w.fontSize and type(FCF_SetChatWindowFontSize)=='function'and not N.ZenialUIStyles()then pcall(FCF_SetChatWindowFontSize,nil,f,w.fontSize)end
     if not w.active then invoke(FCF_Close,f)end
     local name=FCF_GetChatWindowInfo(w.id)
     if name~=w.name then invoke(FCF_SetWindowName,f,w.name)end
@@ -392,7 +391,7 @@ end
 -- Only own reversible decoration; never replace Show/Hide/OnUpdate or native text.
 function N.RefreshAppearance()
     if N.InCombat()then return end
-    local prefs=N.Conflict()and N.Options()or N.Settings()
+    local prefs=(N.Conflict()or N.ZenialUIStyles())and N.Options()or N.Settings()
     local enabled=prefs.compactTabs or prefs.hideButtons or prefs.hideBackground
     if not enabled and next(N.visuals)==nil then return end
     for id=1,maxWindows()do local f=_G['ChatFrame'..id];local tab=_G['ChatFrame'..id..'Tab']

@@ -72,9 +72,12 @@ function O.Add(add)
         add('check',string.format(Z.L('Zähler: %s (#%d)','Counter: %s (#%d)'),entry.name,entry.id),{get=function()return options().unreadTabs[id]~=false end,set=function(v)if v then options().unreadTabs[id]=nil else options().unreadTabs[id]=false end end})
     end
     add('section',Z.L('Native Darstellung','Native appearance'))
-    check(add,Z.L('Kompakte Tab-Schrift','Compact tab text'),'compactTabs')
-    check(add,Z.L('Zusätzliche Chat-Buttons ausblenden','Hide additional chat buttons'),'hideButtons')
-    check(add,Z.L('Chat-Hintergrundelemente ausblenden','Hide chat background elements'),'hideBackground')
+    if N.ZenialUIStyles()then add('note',Z.L('Das Aussehen der Chatfenster steuert ZENIAL UI.','ZENIAL UI controls the look of the chat windows.'))
+    else
+        check(add,Z.L('Kompakte Tab-Schrift','Compact tab text'),'compactTabs')
+        check(add,Z.L('Zusätzliche Chat-Buttons ausblenden','Hide additional chat buttons'),'hideButtons')
+        check(add,Z.L('Chat-Hintergrundelemente ausblenden','Hide chat background elements'),'hideBackground')
+    end
     add('choice',Z.L('Zeitstempel','Timestamps'),{get=function()return options().timestamps end,set=function(v)options().timestamps=v end,
         choices={{'keep',Z.L('Unverändert','Keep current')},{'off',Z.L('Aus','Off')},{'hm','HH:MM'},{'hms','HH:MM:SS'}}})
     add('choice',Z.L('Klassenfarben für Namen','Class colors for names'),{get=function()return options().classColors end,set=function(v)options().classColors=v end,
