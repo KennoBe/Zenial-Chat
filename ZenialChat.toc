@@ -37,6 +37,5 @@ Options.lua
 NativeChatOptions.lua
 Notifications.lua
 Main.lua
-Bindings.xml
 Launcher.lua
 LauncherSpec.lua
