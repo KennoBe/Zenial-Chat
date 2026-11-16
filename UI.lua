@@ -123,7 +123,7 @@ function U.Select(key,messageId,terms)
     if old and old.key~=key then U.scrollMemory[old.key]=not U.atEnd and U.anchor or nil end
     if U.searchPanel then U.searchPanel:Hide();U.panelSearch=nil end
     U.highlightId=messageId;U.highlightKey=key;U.highlightTerms=terms
-    U.input:ClearFocus();Z.store:Select(key);Z.store:SetClosed(key,false)
+    U.input:ClearFocus();if U.CloseQuick then U.CloseQuick()end;Z.store:Select(key);Z.store:SetClosed(key,false)
     U.loadingDraft=true;U.input:SetText(c.draft or'');U.loadingDraft=false;U.loadedKey=key
     U.settingsPanel:Hide();U.chatPanel:Show();U.back:Hide();U.settingsNav:Hide();U.listPanel:Show()
     local remembered=not messageId and old and old.key~=key and Z.store.settings.rememberScroll and(c.unread or 0)==0 and U.scrollMemory[key]or nil
@@ -416,6 +416,7 @@ function U.Refresh()
     if readOnly then U.input:ClearFocus()end
     U.inputBackground:SetShown(not readOnly);U.send:SetShown(not readOnly);U.reply:SetShown(readOnly)
     U.placeholder:SetShown(not readOnly and U.input:GetText()=='')
+    if U.LayoutQuick then U.LayoutQuick()end
     Z.Transcript.Render(U)
     U.RefreshRecovery()
     Z.Theme.ButtonIcon(U.lock,Z.store.settings.locked and'Interface\\PetBattles\\PetBattle-LockIcon'or'Interface\\Icons\\INV_Misc_Key_01',nil,24)
@@ -490,6 +491,7 @@ function U.Layout()
     T.Place(U.back,content-172,10,160,30,U.settingsPanel)
     U.frame:SetMovable(not s.locked);U.frame:SetResizable(not s.locked)
     if U.LayoutOptions then U.LayoutOptions()end
+    if U.LayoutQuick then U.LayoutQuick()end
     if U.LayoutSearch then U.LayoutSearch()end
     U.indexDirty=true;U.indexFull=true;U.layoutRunning=false;U.Refresh()
 end
@@ -564,7 +566,7 @@ function U.Build()
     U.grip:SetScript('OnMouseDown',function()if not Z.store.settings.locked then f:StartSizing('BOTTOMRIGHT')end end)
     U.grip:SetScript('OnMouseUp',function()f:StopMovingOrSizing();U.Layout();U.SaveGeometry()end)
     f:SetScript('OnSizeChanged',function()if not U.layoutRunning then U.resizePending=true end end)
-    f:SetScript('OnHide',function()U.input:ClearFocus();U.search:ClearFocus();U.SaveGeometry();if U.menu then U.menu:Hide()end end)
+    f:SetScript('OnHide',function()if U.CloseQuick then U.CloseQuick()end;U.input:ClearFocus();U.search:ClearFocus();U.SaveGeometry();if U.menu then U.menu:Hide()end end)
     f:SetScript('OnUpdate',function(_,elapsed)
         U.tick=(U.tick or 0)+elapsed
         U.recoveryTick=(U.recoveryTick or 0)+elapsed
