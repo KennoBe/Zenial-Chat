@@ -245,7 +245,9 @@ local function buildFrame()
     end)
     f.native=smallButton(f,Z.L('In der Chatzeile öffnen','Open in chat line'),function()
         local c=f.replyKey and Z.store:Get(f.replyKey);if not c then return end
-        if Z.adapter:OpenNative(c,f.edit:GetText())then Z.store:SetDraft(c.key,'');N.Dismiss()
+        local opened,carried=Z.adapter:OpenNative(c,f.edit:GetText())
+        -- Only a text the chat line really took over leaves the draft; otherwise it stays for the window.
+        if opened then if carried then Z.store:SetDraft(c.key,'')end;N.Dismiss()
         else showError(f,Z.L('Die Chatzeile ließ sich nicht öffnen.','The chat line could not be opened.'),true)end
     end)
     f.edit:SetScript('OnTextChanged',function()
@@ -254,8 +256,10 @@ local function buildFrame()
     end)
     f.edit:SetScript('OnEditFocusGained',function()
         local u=Z.UI
-        -- The open main window with this conversation takes over: one place to type.
-        if f.replyKey and u and u.frame and u.input and u.frame:IsShown()and Z.store.db.ui.selected==f.replyKey then
+        -- The open main window with this conversation takes over: one place to type. Only while its input
+        -- can be seen: the settings page hides it and the search panel covers it.
+        if f.replyKey and u and u.frame and u.input and u.frame:IsShown()and u.input:IsVisible()
+            and not(u.searchPanel and u.searchPanel:IsShown())and Z.store.db.ui.selected==f.replyKey then
             f.edit:ClearFocus();u.RequestRefresh('draft',f.replyKey);u.input:SetFocus();return
         end
         layout(f);updateField(f)
@@ -295,8 +299,8 @@ function present(f,conv)
     f.sub:SetText(subLine(conv,person));N.state=nil;f.nativeOffered=false
     local c=replyConversation(conv);f.replyKey=c and c.key or nil
     if c then
+        -- No byte cap on the field: it would cut a longer draft from the window. The counter and the adapter guard the limit.
         f.max=c.kind=='BN_WHISPER'and 500 or 255
-        if f.edit.SetMaxBytes then f.edit:SetMaxBytes(f.max+1)end
         N.loading=true;f.edit:SetText(c.draft or'');N.loading=false;updateField(f)
     end
     layout(f)
@@ -306,7 +310,8 @@ function show(f)
 end
 function N.Toast(conv,message)
     local f=N.frame or buildFrame()
-    local text=(Z.Plain(message.text):gsub('[\r\n]+',' '))
+    -- Text of another player is data, never markup: Z.Plain turns a doubled pipe into a single one, so it is doubled again.
+    local text=(Z.Plain(message.text):gsub('[\r\n]+',' '):gsub('|','||'))
     local carried=0
     if conv.key and f:IsShown()and f.key~=conv.key then
         -- Typing, an error or a drag in progress stays as it is; the newcomer waits as a row.
@@ -329,7 +334,7 @@ end
 -- Shows a conversation in the banner with its error state; the current one waits as a row.
 local function takeOver(f,c)
     if f:IsShown()and f.key and f.key~=c.key then enqueue(f.conv,f.message or'',N.burst or 1)end
-    unqueue(c.key);N.burst=1;present(f,c);show(f)
+    unqueue(c.key);N.burst=1;f.message='';present(f,c);show(f) -- the message of the former sender must not travel on
 end
 -- A failed send that this banner made: show it again with the reason and give the text back.
 function N.OnRecovery(key)

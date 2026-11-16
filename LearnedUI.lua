@@ -84,7 +84,8 @@ local function refresh()
         if not entry then r.entry=nil;r:Hide()
         else
             r:Show();r.entry=entry
-            r.title:SetText(entry.key);r.sub:SetText(entry.meaning)
+            -- A word may contain a pipe (it comes from chat or from the field): shown as text, never as markup.
+            r.title:SetText((entry.key:gsub('|','||')));r.sub:SetText((entry.meaning:gsub('|','||')))
             theme.Place(r.title,10,3,width-20,15,r);theme.Place(r.sub,10,17,width-20,13,r)
             r:SetBackdropBorderColor(theme.Color(entry.key==I().Key(pg.word:GetText())and'gold'or'border'))
         end

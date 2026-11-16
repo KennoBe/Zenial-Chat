@@ -184,14 +184,15 @@ end
 function A:Locked()
  local info=self.api.C_ChatInfo;return self:Call(type(info)=='table'and info.InChatMessagingLockdown or nil)==true
 end
--- Opens the game's own chat line for a reply; the player sends from there.
+-- Opens the game's own chat line for a reply; the player sends from there. Returns opened, carried:
+-- carried is true only when the text went into that line (the plain tell and Battle.net take none).
 function A:OpenNative(c,text)
- local u=self.api.ChatFrameUtil;if type(c)~='table'or type(u)~='table'then return false end
+ local u=self.api.ChatFrameUtil;if type(c)~='table'or type(u)~='table'then return false,false end
  if c.kind=='WHISPER'then
-  if type(u.SendTellWithMessage)=='function'then return(pcall(u.SendTellWithMessage,c.target,type(text)=='string'and text or''))end
-  if type(u.SendTell)=='function'then return(pcall(u.SendTell,c.target))end
- elseif c.kind=='BN_WHISPER'and type(u.SendBNetTell)=='function'then return(pcall(u.SendBNetTell,c.name))end
- return false
+  if type(u.SendTellWithMessage)=='function'then local ok=pcall(u.SendTellWithMessage,c.target,type(text)=='string'and text or'');return ok,ok end
+  if type(u.SendTell)=='function'then return(pcall(u.SendTell,c.target)),false end
+ elseif c.kind=='BN_WHISPER'and type(u.SendBNetTell)=='function'then return(pcall(u.SendBNetTell,c.name)),false end
+ return false,false
 end
 -- 'pending' or 'failed'; nil once confirmed (the echo removes the attempt) or when the id is unknown.
 function A:AttemptState(id)

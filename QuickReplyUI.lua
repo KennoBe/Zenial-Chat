@@ -20,25 +20,30 @@ local function items()
     for _,t in ipairs(all)do add(t)end
     return list
 end
+-- Rows that fit above the composer (it takes the bottom 132 of the chat panel): a small window shows fewer.
+local function fit()
+    local room=U.chatPanel:GetHeight()-132-8-(46+4+28+8)
+    return math.max(1,math.min(ROWS,math.floor(room/ROW_HEIGHT)))
+end
 local function placeList()
-    local T=Z.Theme;local f=U.quickList
+    local T=Z.Theme;local f=U.quickList;local shown=fit()
     local width=math.min(LIST_WIDTH,U.chatPanel:GetWidth()-20)
-    local height=46+ROWS*ROW_HEIGHT+4+28+8
+    local height=46+shown*ROW_HEIGHT+4+28+8
     T.Place(f,10,math.max(4,U.chatPanel:GetHeight()-132-height-4),width,height,U.chatPanel)
     T.Place(f.searchBox,8,8,width-16,32,f)
-    T.Place(f.manage,8,46+ROWS*ROW_HEIGHT+4,width-16,28,f)
-    return width
+    T.Place(f.manage,8,46+shown*ROW_HEIGHT+4,width-16,28,f)
+    return width,shown
 end
 local function refreshList()
     local f=U.quickList
     if not f or not f:IsShown()then return end
     local T=Z.Theme;local P=Z.Phrases
     local list=items()
-    offset=math.max(0,math.min(math.max(0,#list-ROWS),offset))
-    local width=placeList()
+    local width,shown=placeList()
+    offset=math.max(0,math.min(math.max(0,#list-shown),offset))
     f.hint:SetShown(U.quickSearch:GetText()=='')
     for i=1,ROWS do
-        local r=f.rows[i];local t=list[offset+i]
+        local r=f.rows[i];local t=i<=shown and list[offset+i]or nil
         T.Place(r,8,46+(i-1)*ROW_HEIGHT,width-16,ROW_HEIGHT-2,f)
         if not t then r.template=nil;r:Hide()
         else
