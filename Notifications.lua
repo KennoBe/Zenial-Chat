@@ -39,14 +39,16 @@ function N.Incoming(conv,message,added)
     -- A conversation set to "always" alerts whatever its chat type does; muting still wins.
     local always=conv.notify=='always'
     local quiet=conv.muted or Z.store.settings.suppressInCombat and inCombat()
-    if not quiet then
-        if pref.sound or always then playIncoming(category,pref)end
-        if pref.toast or always then N.Toast(conv,message)end
-    end
+    if not quiet and(pref.sound or always)then playIncoming(category,pref)end
+    local opened=false
     if Z.store.settings.autoOpen and(conv.kind=='WHISPER'or conv.kind=='BN_WHISPER')then
         -- Opening is explicitly opt-in; never change an already visible chat, steal focus or open in combat.
-        if not inCombat()and(not Z.UI.frame or not Z.UI.frame:IsShown())then Z.UI.Select(conv.key)end
+        if not inCombat()and(not Z.UI.frame or not Z.UI.frame:IsShown())then
+            Z.UI.Select(conv.key);opened=Z.UI.frame~=nil and Z.UI.frame:IsShown()
+        end
     end
+    -- A window that opened for this message is the notice.
+    if not quiet and not opened and(pref.toast or always)then N.Toast(conv,message)end
 end
 N.DEFAULT_POS={point='TOPRIGHT',relPoint='TOPRIGHT',x=-28,y=-140}
 local FADE_SECONDS=.35
@@ -90,6 +92,11 @@ end
 function N.Duration()return Z.store and Z.store.settings.toastDuration or 5 end
 N.sent={} -- attempt id -> {key,text} of what the reply line sent; checked once after a while
 local ROW_Y,PLAIN_ROW_Y=104,78
+-- Waiting conversations: keys newest first, and per key what the row shows. At most two rows are drawn.
+N.queue={};N.rows={}
+local waiting={}
+local ROW_H,ROW_GAP=34,4
+local refreshRows,present,show
 local function replyConversation(conv)
     if not conv.key or not Z.store or conv.kind~='WHISPER'and conv.kind~='BN_WHISPER'then return nil end
     local c=Z.store:Get(conv.key);local pref=Z.store.settings.notifications[conv.kind=='BN_WHISPER'and'bnet'or'whispers']
@@ -126,6 +133,7 @@ local function layout(f)
     f.open:SetShown(failed);f.native:SetShown(failed and f.nativeOffered==true)
     T.Place(f.keys,10,y,200,16,f);T.Place(f.count,230,y,80,16,f)
     T.Place(f.open,10,y-2,f.nativeOffered and 140 or 170,20,f);T.Place(f.native,156,y-2,154,20,f)
+    refreshRows()
 end
 local function setBody(f,text,color)
     f.body:SetText(text);f.body:SetTextColor(Z.Theme.Color(color or'text'))
@@ -133,12 +141,73 @@ end
 local function showError(f,message,native)
     N.state='error';f.nativeOffered=native==true;setBody(f,message,'red');layout(f)
 end
--- Closes the current notice. Task 3 lets the next waiting conversation move up here.
+local function indexOf(key)for i,k in ipairs(N.queue)do if k==key then return i end end end
+local function unqueue(key)
+    local i=indexOf(key);if i then table.remove(N.queue,i)end
+    local entry=waiting[key];waiting[key]=nil;return entry
+end
+local function clearQueue()
+    for i=#N.queue,1,-1 do N.queue[i]=nil end;waiting={}
+end
+-- A conversation goes to the front of the queue; a repeat from a queued one counts up.
+local function enqueue(conv,text,count)
+    local entry=unqueue(conv.key)
+    table.insert(N.queue,1,conv.key);waiting[conv.key]={conv=conv,text=text,count=count or(entry and entry.count+1 or 1)}
+    refreshRows()
+end
+-- A waiting conversation becomes the current notice; the former one waits at slot (nil: it does not wait).
+local function promote(f,key,slot)
+    local entry=unqueue(key);if not entry then return end
+    if slot and f.key then
+        table.insert(N.queue,math.min(slot,#N.queue+1),f.key);waiting[f.key]={conv=f.conv,text=f.message or'',count=N.burst or 1}
+    end
+    f.edit:ClearFocus()
+    N.burst=entry.count;present(f,entry.conv);f.message=entry.text;setBody(f,entry.text)
+    if N.burst>1 then f.title:SetText(Z.Format.ConversationLabel(entry.conv)..' ('..N.burst..')')end
+    show(f)
+end
+function N.Show(key)
+    local f=N.frame;if not f or not f:IsShown()or not waiting[key]then return end
+    promote(f,key,indexOf(key))
+end
+-- Closes the current notice; the first waiting conversation moves up without focus.
 function N.Dismiss()
-    if N.frame then N.frame:Hide()end
+    local f=N.frame;if not f then return end
+    local key=N.queue[1]
+    if key and waiting[key]and f:IsShown()then promote(f,key,nil)else f:Hide()end
 end
 function N.HideAll()
-    if N.frame then N.frame:Hide()end
+    clearQueue();if N.frame then N.frame:Hide()end
+end
+local function buildRow(f)
+    local T=Z.Theme;local row
+    row=T.Button(f,'',function()N.Show(row.key)end,'surface')
+    row.icon=T.Icon(row,{});T.Place(row.icon,6,6,22,22,row)
+    row.name=T.Text(row,'',12,true,'goldBright');row.name:SetWordWrap(false);T.Place(row.name,34,3,170,16,row)
+    row.preview=T.Text(row,'',11,false,'muted');row.preview:SetWordWrap(false);T.Place(row.preview,34,18,276,14,row)
+    row.more=T.Text(row,'',11,true,'gold');row.more:SetJustifyH('RIGHT');T.Place(row.more,206,3,50,16,row)
+    row.count=T.Text(row,'',11,true,'text');row.count:SetJustifyH('RIGHT');T.Place(row.count,262,3,50,16,row)
+    return row
+end
+function refreshRows()
+    local f=N.frame;if not f then return end
+    local T=Z.Theme;local q=N.queue;local top=f:GetHeight()+ROW_GAP;local shown=0
+    for i=1,2 do
+        local entry=q[i]and waiting[q[i]];local row=N.rows[i]
+        if entry then
+            row=row or buildRow(f);N.rows[i]=row;shown=shown+1
+            local conv=entry.conv;local person=Z.store and type(conv.name)=='string'and Z.store:Person(conv.name)or nil
+            local class=conv.classFile or person and person.class
+            row.key=q[i];T.SetIcon(row.icon,{kind=conv.kind,classFile=class})
+            row.name:SetText(Z.Format.ConversationLabel(conv))
+            if class then T.NameColor(row.name,class)else row.name:SetTextColor(T.Color('goldBright'))end
+            row.preview:SetText(entry.text);row.count:SetText(entry.count>1 and tostring(entry.count)or'')
+            row.more:SetText(i==2 and#q>2 and'+'..(#q-2)or'')
+            T.Place(row,0,top+(i-1)*(ROW_H+ROW_GAP),320,ROW_H,f);row:Show()
+        elseif row then row:Hide()end
+    end
+    -- Keep the rows on screen as well when the client can widen the clamp area.
+    if f.SetClampRectInsets then pcall(f.SetClampRectInsets,f,0,0,0,-(shown*(ROW_H+ROW_GAP)))end
 end
 local function smallButton(parent,label,fn)
     local b=Z.Theme.Button(parent,label,fn);Z.Theme.Font(b.label,11,true,'text');b.label:SetJustifyH('CENTER');b.label:SetJustifyV('MIDDLE');b:Hide();return b
@@ -210,17 +279,18 @@ local function buildFrame()
     end)
     f:SetScript('OnHide',function(self)
         if self.fade then self.fade:Stop()end;N.fading=false;N.dragging=false;N.state=nil;self:SetAlpha(1);self.edit:ClearFocus()
+        clearQueue();refreshRows()
     end)
     f.close=Z.CloseButton(f,function()N.Dismiss()end,Z.L('Schließen','Close'));T.Place(f.close,288,6,25,24,f)
     return f
 end
 -- Fills the banner for a conversation: icon, names, reply line. The message body is set by the caller.
-local function present(f,conv)
+function present(f,conv)
     local T=Z.Theme;local store=Z.store
     local person=store and type(conv.name)=='string'and store:Person(conv.name)or nil
     local class=conv.classFile or person and person.class
     T.SetIcon(f.icon,{kind=conv.kind,classFile=class})
-    f.key=conv.key;f.title:SetText(Z.Format.ConversationLabel(conv))
+    f.key=conv.key;f.conv=conv;f.title:SetText(Z.Format.ConversationLabel(conv))
     if class then T.NameColor(f.title,class)else f.title:SetTextColor(T.Color('goldBright'))end
     f.sub:SetText(subLine(conv,person));N.state=nil;f.nativeOffered=false
     local c=replyConversation(conv);f.replyKey=c and c.key or nil
@@ -231,24 +301,35 @@ local function present(f,conv)
     end
     layout(f)
 end
-local function show(f)
+function show(f)
     N.left=N.Duration();N.fading=false;N.dragged=false;if f.fade then f.fade:Stop()end;f:SetAlpha(1);f:Show()
 end
 function N.Toast(conv,message)
     local f=N.frame or buildFrame()
-    -- Typing, an error or a drag in progress is never taken away by a notice from someone else.
-    if conv.key and N.Busy()and f.key~=conv.key then return end
+    local text=(Z.Plain(message.text):gsub('[\r\n]+',' '))
+    local carried=0
+    if conv.key and f:IsShown()and f.key~=conv.key then
+        -- Typing, an error or a drag in progress stays as it is; the newcomer waits as a row.
+        if N.Busy()then enqueue(conv,text);return end
+        local entry=unqueue(conv.key);carried=entry and entry.count or 0
+        if f.key then enqueue(f.conv,f.message or'',N.burst or 1)end
+    end
     -- A burst from one conversation updates one notice and counts up instead of flickering.
     local running=f:IsShown()and conv.key and f.key==conv.key
-    N.burst=running and(N.burst or 1)+1 or 1
+    N.burst=running and(N.burst or 1)+1 or carried+1
     local keepBody=running and N.state=='error'
     if not running or not N.Busy()then present(f,conv)end
     local label=Z.Format.ConversationLabel(conv)
     f.title:SetText(N.burst>1 and label..' ('..N.burst..')'or label)
-    f.message=(Z.Plain(message.text):gsub('[\r\n]+',' '))
+    f.message=text
     if not keepBody then setBody(f,f.message)end
     if running and N.Busy()then return end
     show(f)
+end
+-- Shows a conversation in the banner with its error state; the current one waits as a row.
+local function takeOver(f,c)
+    if f:IsShown()and f.key and f.key~=c.key then enqueue(f.conv,f.message or'',N.burst or 1)end
+    unqueue(c.key);N.burst=1;present(f,c);show(f)
 end
 -- A failed send that this banner made: show it again with the reason and give the text back.
 function N.OnRecovery(key)
@@ -260,10 +341,11 @@ function N.OnRecovery(key)
             local c=Z.store:Get(key)
             if reason and c then
                 local f=N.frame or buildFrame()
-                if N.Busy()and f.key~=key then return end -- stays in the window's recovery line
                 N.sent[id]=nil
+                -- Busy: the text stays in the window's recovery line; the conversation waits as a row.
+                if N.Busy()and f.key~=key then enqueue(c,reason);return end
                 if(c.draft or'')==''then Z.store:SetDraft(key,sent.text);Z.adapter:DismissRecovery(id)end
-                present(f,c);show(f);showError(f,reason,false)
+                takeOver(f,c);showError(f,reason,false)
             end
             return
         end
@@ -274,8 +356,9 @@ function N.CheckAttempt(id)
     local sent=N.sent[id];N.sent[id]=nil
     if not sent or not Z.adapter or not Z.store or Z.adapter:AttemptState(id)~='pending'then return end
     local c=Z.store:Get(sent.key);if not c then return end
-    local f=N.frame or buildFrame();if N.Busy()and f.key~=sent.key then return end
-    present(f,c);show(f);showError(f,Z.L('Zustellung unbestätigt.','Delivery unconfirmed.'),false)
+    local f=N.frame or buildFrame();local message=Z.L('Zustellung unbestätigt.','Delivery unconfirmed.')
+    if N.Busy()and f.key~=sent.key then enqueue(c,message);return end
+    takeOver(f,c);showError(f,message,false)
 end
 -- Shows the notice with sample text, so that position and duration can be judged.
 function N.Preview()

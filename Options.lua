@@ -81,7 +81,6 @@ local function buildSpecs()
     elseif U.settingsPage=='behavior'then
         add('section',Z.L('Eingabe & Fenster','Input & window'))
         add('check',Z.L('Eingabe beim Öffnen fokussieren','Focus composer when opening'),{key='focusOnOpen'})
-        add('check',Z.L('Bei Direktnachrichten automatisch öffnen (nicht im Kampf)','Open automatically for direct messages (not in combat)'),{key='autoOpen'})
         add('note',Z.L('Enter sendet · Shift+Enter fügt einen Zeilenumbruch ein. Escape löst zuerst den Eingabefokus.','Enter sends · Shift+Enter inserts a new line. Escape first releases input focus.'))
         add('check',Z.L('Gesendete Nachrichten mit Pfeil hoch/runter abrufen','Recall sent messages with arrow up/down'),{key='inputHistory'})
         add('choice',Z.L('Verlauf der Eingabe','Input history'),{key='inputHistoryScope',choices={{'conversation',Z.L('Je Gespräch','Per conversation')},{'global',Z.L('Für alle Gespräche','Across conversations')}}})
@@ -148,20 +147,31 @@ local function buildSpecs()
         add('section',Z.L('Neue Nachrichten','New messages'))
         add('note',Z.L('Stummgeschaltete Gespräche behalten ihren Ungelesen-Zähler, spielen aber keinen Ton und zeigen keinen Hinweis.','Muted conversations keep unread counts, but do not play a sound or show a notification.'))
         add('note',Z.L('Der Client spielt bei Flüstern und Schlachtzugswarnungen selbst einen Ton. Ein Ton hier kommt zusätzlich hinzu; pro Sekunde spielt Zenial Chat höchstens einen.','The client plays its own sound for whispers and raid warnings. A sound here comes on top; Zenial Chat plays at most one per second.'))
+        add('matrixhead','')
+        for _,group in ipairs({{'whispers','Flüstern','Whispers'},{'bnet','Battle.net','Battle.net'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'raidWarning','Schlachtzugswarnungen','Raid warnings'},{'channels','Öffentliche Kanäle','Public channels'},{'opposite','Gegnerische Fraktion','Opposite faction'}})do
+            local key=group[1];local canReply=key=='whispers'or key=='bnet'
+            local notices={{'off',Z.L('Kein Hinweis','No notice')},{'small',Z.L('Kleiner Hinweis','Small notice')}}
+            if canReply then notices[3]={'reply',Z.L('Hinweis mit Antwortfeld','Notice with reply field')}end
+            add('matrix',Z.L(group[2],group[3]),{key=key,
+                -- off: no notice; small: notice only; reply: notice with a reply line (direct messages only, no key elsewhere)
+                notice={choices=notices,get=function()
+                    local p=s.notifications[key];if p.toast~=true then return'off'end
+                    return canReply and p.reply==true and'reply'or'small'
+                end,set=function(value)
+                    local p=s.notifications[key]
+                    if value=='off'then p.toast=false else p.toast=true;if canReply then p.reply=value=='reply'end end
+                end},
+                sound={get=function()return s.notifications[key].sound end,set=function(value)s.notifications[key].sound=value end},
+                kit={choices=soundChoices,get=function()return Z.Notifications.KitName(key,s.notifications[key])end,set=function(value)
+                    s.notifications[key].soundKit=value;Z.Notifications.PlayKit(value)
+                end}})
+        end
+        add('section',Z.L('Direktnachrichten','Direct messages'))
+        add('check',Z.L('Bei Direktnachrichten automatisch öffnen (nicht im Kampf)','Open automatically for direct messages (not in combat)'),{key='autoOpen'})
+        add('section',Z.L('Hinweis','Notice'))
         add('slider',Z.L('Hinweis-Dauer','Notice duration'),{key='toastDuration',min=2,max=15,step=1,format=function(v)return math.floor(v)..' s'end})
         add('check',Z.L('Im Kampf keine Töne und Hinweise','No sounds or notices in combat'),{key='suppressInCombat'})
         add('action',Z.L('Hinweis-Vorschau anzeigen','Show notice preview'),{run=function()Z.Notifications.Preview()end})
-        for _,group in ipairs({{'whispers','Flüstern','Whispers'},{'bnet','Battle.net','Battle.net'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'raidWarning','Schlachtzugswarnungen','Raid warnings'},{'channels','Öffentliche Kanäle','Public channels'},{'opposite','Gegnerische Fraktion','Opposite faction'}})do
-            local key=group[1];local label=Z.L(group[2],group[3])
-            add('section',label)
-            for _,setting in ipairs({{'sound','Ton abspielen','Play sound'},{'toast','Hinweis anzeigen','Show notification'}})do
-                local field=setting[1]
-                add('check',Z.L(setting[2],setting[3]),{get=function()return s.notifications[key][field]end,set=function(value)s.notifications[key][field]=value end})
-            end
-            add('choice',Z.L('Ton','Sound'),{choices=soundChoices,get=function()return Z.Notifications.KitName(key,s.notifications[key])end,set=function(value)
-                s.notifications[key].soundKit=value;Z.Notifications.PlayKit(value)
-            end})
-        end
         add('action',Z.L('Benachrichtigungston testen','Test notification sound'),{run=function()Z.Notifications.PlayTell()end})
         add('action',Z.L('Hinweisposition zurücksetzen','Reset notification position'),{run=function()Z.Notifications.ResetPosition()end})
         add('note',Z.L('Den Hinweis verschiebst du mit gedrückter linker Maustaste; ein einfacher Klick öffnet das Gespräch.','Drag the notification with the left mouse button to move it; a plain click opens the conversation.'))
@@ -200,6 +210,25 @@ local function change(spec,v)
     if spec.after then spec.after()end
 end
 local function choices(spec)return type(spec.choices)=='function'and spec.choices()or spec.choices or{}end
+local function arrow(button)
+    button.arrow=button:CreateTexture(nil,'ARTWORK');button.arrow:SetTexture('Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up')
+    button.arrow:SetPoint('RIGHT',button,'RIGHT',-7,0);button.arrow:SetSize(14,14)
+end
+-- The menu of a choice; item has choices, get and set (or key).
+local function openChoice(button,item)
+    local menu={}
+    for _,choice in ipairs(choices(item))do
+        local id=choice[1]
+        menu[#menu+1]={text=choice[2],run=function()change(item,id);U.LayoutOptions()end}
+    end
+    if#menu==0 then menu[1]={text=Z.L('Keine Auswahl verfügbar','No options available'),run=function()end}end
+    U.ShowMenu(button,menu)
+end
+local function choiceLabel(item)
+    local current=value(item)
+    for _,entry in ipairs(choices(item))do if tostring(entry[1])==tostring(current)then return entry[2]end end
+    return Z.L('Auswählen …','Choose …')
+end
 local function control(index,spec)
     local T=Z.Theme;local key=spec.kind..':'..index
     if U.optionRows[key]then return U.optionRows[key]end
@@ -223,17 +252,16 @@ local function control(index,spec)
         row.check:SetScript('OnClick',function(self)change(row.spec,self:GetChecked()==true)end)
         row:EnableMouse(true);row:SetScript('OnMouseUp',function()local v=not value(row.spec);row.check:SetChecked(v);change(row.spec,v)end)
     elseif spec.kind=='choice'then
-        row.button=T.Button(row,'',function(self)
-            local item=row.spec;local menu={}
-            for _,choice in ipairs(choices(item))do
-                local id=choice[1]
-                menu[#menu+1]={text=choice[2],run=function()change(item,id);U.LayoutOptions()end}
-            end
-            if#menu==0 then menu[1]={text=Z.L('Keine Auswahl verfügbar','No options available'),run=function()end}end
-            U.ShowMenu(self,menu)
-        end)
-        row.button.arrow=row.button:CreateTexture(nil,'ARTWORK');row.button.arrow:SetTexture('Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up')
-        row.button.arrow:SetPoint('RIGHT',row.button,'RIGHT',-7,0);row.button.arrow:SetSize(14,14)
+        row.button=T.Button(row,'',function(self)openChoice(self,row.spec)end);arrow(row.button)
+    elseif spec.kind=='matrixhead'then
+        row.h1=T.Text(row,Z.L('Hinweis','Notice'),11,true,'muted');row.h2=T.Text(row,Z.L('Ton','Sound'),11,true,'muted');row.h3=T.Text(row,Z.L('Klang','Tone'),11,true,'muted')
+    elseif spec.kind=='matrix'then
+        row.notice=T.Button(row,'',function(self)openChoice(self,row.spec.notice)end);arrow(row.notice)
+        row.check=CreateFrame('CheckButton',nil,row,'BackdropTemplate');T.Panel(row.check,'field','border')
+        row.check:SetCheckedTexture('Interface\\Buttons\\UI-CheckBox-Check')
+        row.check:SetScript('OnClick',function(self)change(row.spec.sound,self:GetChecked()==true)end)
+        row.checkLabel=T.Text(row,Z.L('Ton','Sound'),12,false,'text')
+        row.kit=T.Button(row,'',function(self)openChoice(self,row.spec.kit)end);arrow(row.kit)
     elseif spec.kind=='action'then row.button=T.Button(row,'',function()row.spec.run()end)end
     U.optionRows[key]=row;return row
 end
@@ -305,9 +333,23 @@ function U.LayoutOptions()
         elseif spec.kind=='choice'then
             height=stacked and 74 or 42;local x=stacked and 0 or math.min(180,width*.42)
             T.Place(row.label,0,10,stacked and width or x-10,24,row)
-            local current=value(spec);local label=Z.L('Auswählen …','Choose …')
-            for _,item in ipairs(choices(spec))do if tostring(item[1])==tostring(current)then label=item[2];break end end
-            row.button.label:SetText(label);T.Place(row.button,x,stacked and 34 or 4,width-x,32,row)
+            row.button.label:SetText(choiceLabel(spec));T.Place(row.button,x,stacked and 34 or 4,width-x,32,row)
+        elseif spec.kind=='matrixhead'then
+            -- Column titles; the narrow layout has the controls under each label and needs none.
+            height=stacked and 2 or 24;row.label:Hide();local x0=math.min(180,width*.36)
+            local noticeW=math.floor((width-x0)*.5);local checkX=x0+noticeW+10;local kitX=checkX+44
+            T.Place(row.h1,x0,5,noticeW,16,row);T.Place(row.h2,checkX-4,5,44,16,row);T.Place(row.h3,kitX,5,width-kitX,16,row)
+            for _,h in ipairs({row.h1,row.h2,row.h3})do h:SetShown(not stacked)end
+        elseif spec.kind=='matrix'then
+            local x0=stacked and 0 or math.min(180,width*.36);local top=stacked and 34 or 4
+            local noticeW=math.floor((width-x0)*(stacked and .46 or .5));local checkX=x0+noticeW+(stacked and 8 or 10)
+            local kitX=checkX+(stacked and 76 or 44)
+            height=stacked and 74 or 42;row.label:Show()
+            T.Place(row.label,0,stacked and 8 or 10,stacked and width or x0-10,24,row)
+            row.notice.label:SetText(choiceLabel(spec.notice));T.Place(row.notice,x0,top,noticeW,32,row)
+            T.Place(row.check,checkX,top+5,22,22,row);row.check:SetChecked(value(spec.sound)==true)
+            row.checkLabel:SetShown(stacked);if stacked then T.Place(row.checkLabel,checkX+28,top+7,44,20,row)end
+            row.kit.label:SetText(choiceLabel(spec.kit));T.Place(row.kit,kitX,top,math.max(40,width-kitX),32,row)
         else
             height=stacked and 49 or 42;row.label:Hide();row.button.label:SetText(spec.label);T.Place(row.button,0,5,width,33,row)
         end
