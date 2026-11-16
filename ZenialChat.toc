@@ -11,6 +11,7 @@ Core.lua
 Store.lua
 Format.lua
 Search.lua
+Bookmarks.lua
 Layout.lua
 Adapter.lua
 Opposite.lua
@@ -33,6 +34,8 @@ Transcript.lua
 UI.lua
 SearchUI.lua
 PhraseUI.lua
+TemplateUI.lua
+LearnedUI.lua
 Options.lua
 NativeChatOptions.lua
 Notifications.lua

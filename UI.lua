@@ -265,6 +265,17 @@ function U.MessageMenu(anchor,msg)
     add(Z.L('Mit Absender kopieren','Copy with sender'),function()U.ShowCopy(Z.Format.MessageLine(c,msg,'sender'))end)
     add(Z.L('Mit Zeit und Absender kopieren','Copy with time and sender'),function()U.ShowCopy(Z.Format.MessageLine(c,msg,'time'))end)
     if c.kind~='XFACTION'then add(Z.L('Zitieren','Quote'),function()U.QuoteMessage(msg)end)end
+    if Z.Bookmarks then
+        if Z.Bookmarks.Has(c.key,msg.id)then
+            add(Z.L('Lesezeichen entfernen','Remove bookmark'),function()Z.Bookmarks.Remove(c.key,msg.id);U.Refresh()end)
+        else
+            add(Z.L('Lesezeichen setzen','Add bookmark'),function()
+                local ok,why=Z.Bookmarks.Add(c,msg)
+                if ok then U.Refresh()
+                elseif why=='limit'then U.Notice(string.format(Z.L('Höchstens %d Lesezeichen. Entferne zuerst einige.','At most %d bookmarks. Remove some first.'),Z.Bookmarks.MAX))end
+            end)
+        end
+    end
     -- Character actions only for a real character name; a Battle.net account has its own native menu.
     if name~=''and not msg.outgoing and c.kind~='BN_WHISPER'then
         if c.kind~='WHISPER'and c.kind~='XFACTION'then add(Z.L('Anflüstern','Whisper'),function()U.OpenWhisper(name)end)end
@@ -442,7 +453,8 @@ function U.Layout()
     U.frame:SetScale(scale);U.frame:SetSize(w,h);U.frame:SetResizeBounds(540,360,math.max(540,UIParent:GetWidth()/scale-16),math.max(360,UIParent:GetHeight()/scale-16))
     U.metrics=Z.Layout.Resolve(w,h,s,U.metrics and U.metrics.mode)
     local sw=U.metrics.sidebarWidth;local content=w-sw-18
-    T.Place(U.titleBar,5,5,w-10,35,U.frame);T.Place(U.brand,8,3,28,28,U.titleBar);T.Place(U.title,46,6,w-195,26,U.titleBar)
+    T.Place(U.titleBar,5,5,w-10,35,U.frame);T.Place(U.brand,8,3,28,28,U.titleBar);T.Place(U.title,46,6,w-235,26,U.titleBar)
+    T.Place(U.bookmarks,w-169,7,34,28,U.frame);U.bookmarks:SetShown(Z.Bookmarks~=nil and U.OpenBookmarks~=nil)
     T.Place(U.gear,w-129,7,34,28,U.frame);T.Place(U.lock,w-89,7,34,28,U.frame);T.Place(U.close,w-49,7,34,28,U.frame)
     T.Place(U.listPanel,7,43,sw-2,h-50,U.frame)
     T.Place(U.searchBackground,6,8,sw-14,32,U.listPanel)
@@ -491,6 +503,9 @@ function U.Build()
     U.title=T.Text(U.titleBar,'Zenial Chat',20,true,'goldBright')
     U.titleBar:SetScript('OnDragStart',function()if not Z.store.settings.locked then f:StartMoving()end end)
     U.titleBar:SetScript('OnDragStop',function()f:StopMovingOrSizing();U.SaveGeometry()end)
+    -- Left of the gear. Hidden while the overview (SearchUI) or the bookmark module is missing.
+    U.bookmarks=T.Button(U.titleBar,'★',function()if U.OpenBookmarks then U.OpenBookmarks()end end);U.bookmarks.tip=Z.L('Lesezeichen','Bookmarks')
+    T.ButtonIcon(U.bookmarks,T.icons.history,nil,24)
     U.gear=T.Button(U.titleBar,'⚙',function()U.OpenSettings('appearance')end);U.gear.tip=Z.L('Einstellungen','Settings')
     T.ButtonIcon(U.gear,'Interface\\WorldMap\\GEAR_64GREY',nil,24)
     U.lock=T.Button(U.titleBar,'◇',function()U.SetSetting('locked',not Z.store.settings.locked)end);U.lock.tip=Z.L('Position und Größe sperren','Lock position and size')

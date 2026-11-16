@@ -247,6 +247,26 @@ function Store.New(db, nowFn)
             self.conversations[key] = nil
         end
     end
+    -- Bookmarks are own copies of messages. Entries without a text or a place are dropped, damaged
+    -- optional fields are reset, and no message is bookmarked twice.
+    local bookmarks, listed = {}, {}
+    if type(db.bookmarks) == 'table' then
+        for _, entry in ipairs(db.bookmarks) do
+            if type(entry) == 'table' and type(entry.key) == 'string' and type(entry.id) == 'string'
+                and type(entry.text) == 'string' and not (listed[entry.key] and listed[entry.key][entry.id]) then
+                listed[entry.key] = listed[entry.key] or {}
+                listed[entry.key][entry.id] = true
+                if not isFiniteNumber(entry.at) then entry.at = 0 end
+                if not isFiniteNumber(entry.added) then entry.added = 0 end
+                if type(entry.sender) ~= 'string' then entry.sender = nil end
+                if type(entry.conv) ~= 'string' then entry.conv = nil end
+                if type(entry.kind) ~= 'string' then entry.kind = nil end
+                entry.outgoing = entry.outgoing == true or nil
+                bookmarks[#bookmarks + 1] = entry
+            end
+        end
+    end
+    db.bookmarks = bookmarks
     self.people = ensureTable(db, 'people')
     self._peopleCount = 0
     for _ in pairs(self.people) do self._peopleCount = self._peopleCount + 1 end

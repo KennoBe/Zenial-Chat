@@ -270,6 +270,9 @@ local function bubble(u,index)
     row.icon=T.Icon(row,{kind='WHISPER'})
     row.author=T.Text(row,'',12,true,'goldBright');row.author:SetWordWrap(false)
     row.bodyFrame=T.Frame(row,'bubble','line');row.body=T.Text(row.bodyFrame,'',14,false,'text');row.body:SetWordWrap(true);row.body:SetNonSpaceWrap(true)
+    -- Gold mark in the top right corner of a bookmarked message; shown or hidden on every draw.
+    row.mark=row.bodyFrame:CreateTexture(nil,'OVERLAY');row.mark:SetColorTexture(T.Color('gold'));row.mark:SetSize(6,12)
+    row.mark:SetPoint('TOPRIGHT',row.bodyFrame,'TOPRIGHT',-1,-2);row.mark:Hide()
     row.time=T.Text(row,'',10,false,'muted');row.time:SetJustifyH('RIGHT')
     row.context=T.Text(row,'',11,false,'muted');row.context:SetJustifyH('CENTER')
     row:EnableMouse(true);row:SetHyperlinksEnabled(true)
@@ -395,7 +398,7 @@ function R.Render(u,secondPass)
                 row.date:SetText(Z.Format.DayLabel(msg.at));T.Place(row.date,8,2,w-16,20,row);row.date:Show()
             else row.date:Hide()end
             if msg.context then
-                row.icon:Hide();row.author:Hide();row.bodyFrame:Hide();row.time:Hide();row.context:Show()
+                row.icon:Hide();row.author:Hide();row.bodyFrame:Hide();row.time:Hide();row.mark:Hide();row.context:Show()
                 row.context:SetText(Z.Plain(msg.text));T.Place(row.context,12,info.dateHeight+5,w-24,22,row)
             else
                 row.context:Hide();row.bodyFrame:Show();row.author:Show();row.time:Show()
@@ -407,6 +410,7 @@ function R.Render(u,secondPass)
                     elseif s.urlLinks then text=Z.Format.Linkify(text)end
                     if u.highlightKey==conv.key and u.highlightTerms then text=Z.Format.Highlight(text,u.highlightTerms)end
                 end
+                row.mark:SetShown(Z.Bookmarks~=nil and Z.Bookmarks.Has(conv.key,msg.id))
                 local highlighted=msg.id==u.highlightId or msg.id==u.rangeStart
                 if placeBubble(u,row,conv,msg,info,w,text,s,highlighted)then
                     info.height=rowHeight(info,s);if not firstChanged then firstChanged=i end
