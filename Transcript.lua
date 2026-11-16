@@ -137,29 +137,43 @@ end
 local function wordsEditable(msg)
     return msg.reading~='exact'and Z.Interpret and Z.Interpret.LanguageId(msg.language)~=nil and not tostring(msg.id):find('|',1,true)
 end
-local function originalLine(msg)
+local GOLD,RED='|cffffd100','|cffe0705a'
+local SOURCES={learned={'eigene Bedeutung','own meaning'},measured={'Wortliste','word list'},computed={'Wortliste','word list'},public={'Wortliste','word list'}}
+local ELLIPSIS='\226\128\166'
+-- Messages whose details are open. Lives for the session only, never saved.
+R.xfOpen={}
+-- Words with a learned meaning are gold, words without any candidate red. Exact and spelled lines stay plain.
+local function originalLine(msg,detail)
     local text=msg.text
     if type(text)~='string'or text==''then return nil end
     if not wordsEditable(msg)then return escape(text)end
+    local words=type(detail)=='table'and detail.kind~='spelled'and detail.words or nil
     local n=0
     return(text:gsub('(%s*)(%S+)',function(space,word)
         n=n+1
-        return space..'|Hzchatxf:'..msg.id..':'..n..'|h'..escape(word)..'|h'
+        local link='|Hzchatxf:'..msg.id..':'..n..'|h'..escape(word)..'|h'
+        local entry=words and words[n]
+        if entry then
+            if entry.source=='learned'then link=GOLD..link..'|r'
+            elseif entry.source==nil then link=RED..link..'|r'end
+        end
+        return space..link
     end))
 end
-local function alternativesLine(detail)
-    local parts={}
-    if type(detail)=='table'and type(detail.words)=='table'then
-        for _,e in ipairs(detail.words)do
-            if type(e.alternatives)=='table'and#e.alternatives>0 then
-                local alts={}
-                for _,a in ipairs(e.alternatives)do alts[#alts+1]=escape(a)end
-                parts[#parts+1]=escape(e.chosen or e.fake or'')..' = '..table.concat(alts,' / ')
-            end
+-- One line per word: what it was read as and where that comes from.
+local function detailLines(detail)
+    local lines={}
+    for _,e in ipairs(detail.words)do
+        local source=SOURCES[e.source]
+        local line=escape(e.fake or'')..' = '..escape(e.chosen or ELLIPSIS)..' · '..(source and Z.L(source[1],source[2])or Z.L('unbekannt','unknown'))
+        if type(e.alternatives)=='table'and#e.alternatives>0 then
+            local alts={}
+            for _,a in ipairs(e.alternatives)do alts[#alts+1]=escape(a)end
+            line=line..Z.L(' · auch: ',' · also: ')..table.concat(alts,', ')
         end
+        lines[#lines+1]=READING_COLOR..line..'|r'
     end
-    if#parts==0 then return nil end
-    return Z.L('Alternativen: ','Alternatives: ')..table.concat(parts,'; ')
+    return lines
 end
 -- Header, original text and interpretation of one message. The interpretation is computed here, never stored,
 -- so a correction takes effect on the next draw. Never shows a probability.
@@ -169,17 +183,25 @@ function R.OppositeText(msg)
     if channel then head[#head+1]=Z.L(channel[1],channel[2])end
     if type(msg.language)=='string'and msg.language~=''then head[#head+1]=escape(msg.language)end
     local lines={HEAD_COLOR..table.concat(head,' · ')..'|r'}
-    local original=originalLine(msg)
-    if original then lines[#lines+1]=original end
     local reading,meaning,detail=msg.reading,msg.meaning,nil
     if reading~='exact'then reading,meaning,detail=Z.Interpret.Read(msg)end
+    local original=originalLine(msg,detail)
+    if original then lines[#lines+1]=original end
     local label
     if reading=='exact'then label=Z.L('Exakt decodiert: ','Decoded exactly: ')..escape(meaning or'')
-    elseif reading=='guess'then label=Z.L('Vermutete Bedeutung: ','Presumed meaning: ')..escape(meaning or'')..Z.L(' (Vermutung)',' (guess)')
-    else label=Z.L('Nicht interpretierbar','Cannot be interpreted')end
-    lines[#lines+1]=READING_COLOR..label..'|r'
-    local alternatives=reading=='guess'and alternativesLine(detail)
-    if alternatives then lines[#lines+1]=READING_COLOR..alternatives..'|r'end
+    elseif reading=='guess'then
+        if type(detail)=='table'and detail.own then label=Z.L('Eigene Bedeutung: ','Own meaning: ')..escape(meaning or'')
+        else label=Z.L('Vermutete Bedeutung: ','Presumed meaning: ')..escape(meaning or'')..Z.L(' (Vermutung)',' (guess)')end
+    else
+        label=Z.L('Nicht interpretierbar','Cannot be interpreted')
+        if wordsEditable(msg)then label=label..Z.L(' · Klick auf ein Wort legt eine Bedeutung fest.',' · Click a word to set a meaning.')end
+    end
+    local id=tostring(msg.id)
+    local expandable=reading=='guess'and type(detail)=='table'and detail.kind~='spelled'and type(detail.words)=='table'and not id:find('|',1,true)
+    local line=READING_COLOR..label..'|r'
+    if expandable then line=line..' |Hzchatxfd:'..id..'|h|cffffe05c['..Z.L('Einzelheiten','Details')..']|r|h'end
+    lines[#lines+1]=line
+    if expandable and R.xfOpen[id]then for _,l in ipairs(detailLines(detail))do lines[#lines+1]=l end end
     return table.concat(lines,'\n')
 end
 local function learnedMeaning(language,word)
@@ -190,7 +212,16 @@ end
 local function rebuild(u)
     u.measured={};u.indexDirty=true;u.indexFull=true;u.Refresh()
 end
--- Right-click on a word of an original line: set or forget its meaning.
+-- Measured heights are dropped and the transcript is drawn again; nothing happens without a window.
+function R.Invalidate()
+    local u=Z.UI
+    if u and u.frame then rebuild(u)end
+end
+local function meaningError(u,err)
+    if err=='limit'then u.Notice(Z.L('Zu viele eigene Bedeutungen für diese Sprache. Vergiss zuerst einige.','Too many own meanings for this language. Forget some first.'))
+    else u.Notice(Z.L('Ungültige Bedeutung: höchstens 64 Zeichen, keine Steuerzeichen und kein senkrechter Strich.','Invalid meaning: at most 64 characters, no control characters and no vertical bar.'))end
+end
+-- Click on a word of an original line: set or forget its meaning, or take one of the other readings.
 function R.WordMenu(id,position)
     local u=Z.UI;local conv=Z.store:Get(Z.store.db.ui.selected)
     if not u or not conv or conv.kind~='XFACTION'then return end
@@ -202,11 +233,18 @@ function R.WordMenu(id,position)
     local items={{text=Z.L('Bedeutung festlegen …','Set meaning …'),run=function()
         u.Prompt(Z.L('Bedeutung von ','Meaning of ')..Z.Plain(word),current or'',function(value)
             local ok,err=Z.Interpret.Learn(language,word,value)
-            if ok then rebuild(u)
-            elseif err=='limit'then u.Notice(Z.L('Zu viele eigene Bedeutungen für diese Sprache. Vergiss zuerst einige.','Too many own meanings for this language. Forget some first.'))
-            else u.Notice(Z.L('Ungültige Bedeutung: höchstens 64 Zeichen, keine Steuerzeichen und kein senkrechter Strich.','Invalid meaning: at most 64 characters, no control characters and no vertical bar.'))end
+            if ok then rebuild(u)else meaningError(u,err)end
         end)
     end}}
+    local _,_,detail=Z.Interpret.Read(msg)
+    local entry=type(detail)=='table'and type(detail.words)=='table'and detail.words[position]or nil
+    for i,alt in ipairs(entry and type(entry.alternatives)=='table'and entry.alternatives or{})do
+        if i>3 or type(alt)~='string'then break end
+        items[#items+1]={text=string.format(Z.L('„%s“ übernehmen','Use “%s”'),escape(alt)),run=function()
+            local ok,err=Z.Interpret.Learn(language,word,alt)
+            if ok then rebuild(u)else meaningError(u,err)end
+        end}
+    end
     if current then
         items[#items+1]={text=Z.L('Bedeutung vergessen','Forget meaning'),run=function()
             Z.Interpret.Forget(language,word);rebuild(u)
@@ -219,8 +257,11 @@ local function handleLink(self,link,text,button)
     local url=link:match('^zchaturl:(.+)$')
     if url then Z.UI.ShowCopy(url,Z.L('Adresse kopieren · Strg+C','Copy address · Ctrl+C'));return end
     local xfId,xfWord=link:match('^zchatxf:(.+):(%d+)$')
-    if xfId then
-        if button=='RightButton'then R.WordMenu(xfId,tonumber(xfWord))end
+    if xfId then R.WordMenu(xfId,tonumber(xfWord));return end
+    local detailId=link:match('^zchatxfd:(.+)$')
+    if detailId then
+        R.xfOpen[detailId]=not R.xfOpen[detailId]or nil
+        if Z.UI and Z.UI.frame then rebuild(Z.UI)end
         return
     end
     if link:match('^zchattime:')then
@@ -249,8 +290,9 @@ local function handleLinkEnter(self,link)
     local msg=self.message;local conv=Z.store:Get(Z.store.db.ui.selected)
     if link:match('^zchaturl:')then Z.Theme.Tooltip(self,link:match('^zchaturl:(.+)$')or'',Z.L('Klicken zum Kopieren. Addons können keinen Browser öffnen.','Click to copy. Addons cannot open a browser.'));return end
     if link:match('^zchatxf:')then
-        Z.Theme.Tooltip(self,Z.L('Bedeutung festlegen','Set meaning'),Z.L('Rechtsklick: Bedeutung festlegen …','Right-click: set meaning …'));return
+        Z.Theme.Tooltip(self,Z.L('Bedeutung festlegen','Set meaning'),Z.L('Klick: Bedeutung festlegen …','Click: set meaning …'));return
     end
+    if link:match('^zchatxfd:')then return end
     if link:match('^zchattime:')then
         if msg then Z.Theme.Tooltip(self,Z.Format.FullTime(msg.at),Z.L('Shift-Klick zitiert die Nachricht in die Eingabe.','Shift-click quotes the message into the input.'))end
         return

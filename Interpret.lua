@@ -65,8 +65,21 @@ local function matchPhrase(cands)
     return best
 end
 
+-- An own meaning outranks the word list, also inside a phrase: where a word has learned candidates only those count.
+local function preferLearned(cands)
+    local out={}
+    for i,list in ipairs(cands)do
+        local own={}
+        for _,c in ipairs(list)do if c.source=='learned'then own[#own+1]=c end end
+        out[i]=#own>0 and own or list
+    end
+    return out
+end
+
 -- reading ('guess'|'unknown'), meaning (string|nil), detail (table|nil). Never raises.
--- detail.words[i] = {fake=<original word>, chosen=<shown text>|nil, alternatives={words not shown}}
+-- detail.words[i] = {fake=<original word>, chosen=<shown text>|nil, alternatives={words not shown},
+--   source='learned'|'measured'|'computed'|'public'|nil (of the shown word; nil: no candidate at all)}
+-- detail.own is true when every word is shown from a learned meaning. Such a line stays a 'guess'.
 function I.Read(message)
     local ok,reading,meaning,detail=pcall(function()
         if type(message)~='table'then return'unknown'end
@@ -86,34 +99,37 @@ function I.Read(message)
         if#entries==0 then return'unknown'end
         local complete=true
         for _,list in ipairs(cands)do if#list==0 then complete=false end end
-        local phrase=complete and matchPhrase(cands)or nil
+        local phrase=complete and matchPhrase(preferLearned(cands))or nil
         local shown={}
         for i,e in ipairs(entries)do
             local list=cands[i]
-            local chosen,used
+            local chosen,used,source
             if#list==0 then
                 chosen=ELLIPSIS;used={}
             elseif phrase then
                 chosen=phrase.w[i];used={[chosen]=true}
+                for _,c in ipairs(list)do if c.word==chosen then source=c.source;break end end
             else
                 local top,names=list[1],{list[1].word}
                 for k=2,math.min(#list,I.MAX_SHOWN)do
                     if list[k].source==top.source and list[k].rank==top.rank then names[#names+1]=list[k].word else break end
                 end
-                chosen=table.concat(names,' / ');used={}
+                chosen=table.concat(names,' / ');used={};source=top.source
                 for _,w in ipairs(names)do used[w]=true end
             end
             local alts={}
             for _,c in ipairs(list)do
                 if not used[c.word]and#alts<I.MAX_SHOWN then alts[#alts+1]=c.word end
             end
-            e.chosen=chosen;e.alternatives=alts;shown[#shown+1]=chosen
+            e.chosen=chosen;e.alternatives=alts;e.source=source;shown[#shown+1]=chosen
         end
         if not any then
             for _,e in ipairs(entries)do e.chosen=nil end
             return'unknown',nil,{words=entries}
         end
-        return'guess',table.concat(shown,' '),{words=entries,kind=phrase and'phrase'or'words'}
+        local own=true
+        for _,e in ipairs(entries)do if e.source~='learned'then own=false;break end end
+        return'guess',table.concat(shown,' '),{words=entries,kind=phrase and'phrase'or'words',own=own or nil}
     end)
     if not ok then return'unknown',nil,nil end
     return reading,meaning,detail
