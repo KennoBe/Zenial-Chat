@@ -6,6 +6,7 @@ SlashCmdList.ZENIALCHAT=function(text)
     text=type(text)=='string'and text:match('^%s*(.-)%s*$')or''
     if text=='settings'or text=='config'or text=='einstellungen'then Z.UI.OpenSettings('appearance')
     elseif text=='phrases'then if Z.Opposite then Z.Opposite.OpenPhrases()end
+    elseif text=='templates'or text=='vorlagen'then if Z.PhraseUI then pcall(Z.PhraseUI.Open,nil,'templates')end
     else Z.UI.Toggle()end
 end
 local frame=CreateFrame('Frame');Z.eventFrame=frame

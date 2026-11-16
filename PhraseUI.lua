@@ -1,12 +1,14 @@
--- Popup for spelled phrases to the other faction: search, pick, preview, then Say or Yell on click.
--- The popup never changes the selected conversation and never sends by itself.
+-- Popup "Vorlagen" with pages (tabs). Page xf: spelled phrases to the other faction: search, pick, preview, then Say or Yell on click.
+-- Other files add pages with V.RegisterPage. The popup never changes the selected conversation and never sends by itself.
 local _,Z=...
 local V={};Z.PhraseUI=V
-local WIDTH,HEIGHT=520,610
+local WIDTH,PAGE_HEIGHT=520,574
+local TOP,TAB_HEIGHT=36,32 -- title strip; tab bar (only with several pages)
 local ROWS,ROW_HEIGHT=10,34
-local LIST_TOP=140
+local LIST_TOP=104
 local STEP=3 -- list entries per mouse wheel notch
 local f,rows,items,offset,selectedId,category,preferred,errorText,updating
+local pages,frames={},{} -- spec and page frame per page id
 local function T()return Z.Theme end
 local function L(de,en)return Z.L(de,en)end
 local function tableAndStatus()
@@ -30,7 +32,7 @@ local function describe(code)local e=errorTexts[code];return e and e()or tostrin
 -- Entries are {header=text} or {phrase=table}. Search text or a category gives a flat list.
 local function buildItems()
     local P=Z.Phrases
-    local query=f and f.input:GetText()or''
+    local query=f and f.input and f.input:GetText()or''
     local list={}
     if query~=''or category then
         for _,phrase in ipairs(P.List(query,category))do list[#list+1]={phrase=phrase}end
@@ -110,8 +112,7 @@ local function sendLabel(base,status)
     if status=='outdated'then return base..' '..L('(unzuverlässig)','(unreliable)')end
     return base
 end
-function V.Refresh()
-    if not f or not f:IsShown()then return end
+local function refreshXf()
     local theme=T();local P=Z.Phrases
     items=buildItems()
     offset=math.max(0,math.min(maxOffset(),offset or 0))
@@ -198,58 +199,121 @@ local function send(channel)
     end
     errorText=nil;P.Touch(phrase.id);V.Refresh()
 end
-local function build()
-    if f then return end
+local function buildXf(page,width,height)
     local theme=T()
-    f=theme.Frame(UIParent,'shell','gold');f:SetFrameStrata('HIGH');f:SetSize(WIDTH,HEIGHT);f:SetPoint('CENTER');f:EnableMouse(true)
-    f:SetClampedToScreen(true);f:Hide()
     rows={};items={};offset=0
-    f.title=theme.Text(f,L('Phrasen für die Gegenfraktion','Phrases for the other faction'),14,true);f.title:SetPoint('TOPLEFT',12,-12)
-    f.close=Z.CloseButton(f,function()V.Close()end,L('Schließen','Close'));theme.Place(f.close,WIDTH-38,7,28,26,f)
-    f.input,f.inputBackground=theme.Input(f);theme.Place(f.inputBackground,12,40,WIDTH-24,30,f)
+    f.input,f.inputBackground=theme.Input(page);theme.Place(f.inputBackground,12,4,width-24,30,page)
     f.input:SetScript('OnTextChanged',function()offset=0;V.Refresh()end)
     f.input:SetScript('OnEscapePressed',function()V.Close()end)
     f.input:SetScript('OnEnterPressed',function(self)self:ClearFocus()end)
     -- Category bar: "All" plus the built-in categories, two rows.
     f.categories={}
     local keys={''};for _,key in ipairs(Z.PhraseData.categories)do keys[#keys+1]=key end
-    local perRow=4;local cw=math.floor((WIDTH-24-(perRow-1)*6)/perRow)
+    local perRow=4;local cw=math.floor((width-24-(perRow-1)*6)/perRow)
     for i,key in ipairs(keys)do
-        local b=theme.Button(f,key==''and L('Alle','All')or Z.Phrases.CategoryLabel(key),function()
+        local b=theme.Button(page,key==''and L('Alle','All')or Z.Phrases.CategoryLabel(key),function()
             category=key~=''and key or nil;offset=0;V.Refresh()
         end)
         local col,line=(i-1)%perRow,math.floor((i-1)/perRow)
-        theme.Place(b,12+col*(cw+6),76+line*30,cw,26,f);f.categories[key]=b
+        theme.Place(b,12+col*(cw+6),40+line*30,cw,26,page);f.categories[key]=b
     end
-    f.list=CreateFrame('Frame',nil,f);f.list:SetClipsChildren(true)
-    theme.Place(f.list,12,LIST_TOP,WIDTH-24-18,ROWS*ROW_HEIGHT,f)
+    f.list=CreateFrame('Frame',nil,page);f.list:SetClipsChildren(true)
+    theme.Place(f.list,12,LIST_TOP,width-24-18,ROWS*ROW_HEIGHT,page)
     f.list:EnableMouseWheel(true);f.list:SetScript('OnMouseWheel',function(_,delta)setOffset(offset-delta*STEP)end)
-    f.scrollbar=CreateFrame('Slider',nil,f,'BackdropTemplate');theme.Panel(f.scrollbar,'field','line')
+    f.scrollbar=CreateFrame('Slider',nil,page,'BackdropTemplate');theme.Panel(f.scrollbar,'field','line')
     f.scrollbar:SetOrientation('VERTICAL');f.scrollbar:SetValueStep(1);f.scrollbar:SetThumbTexture('Interface\\Buttons\\UI-ScrollBar-Knob')
-    theme.Place(f.scrollbar,WIDTH-12-14,LIST_TOP,14,ROWS*ROW_HEIGHT,f)
+    theme.Place(f.scrollbar,width-12-14,LIST_TOP,14,ROWS*ROW_HEIGHT,page)
     f.scrollbar:SetScript('OnValueChanged',function(_,value)if not updating then setOffset(value)end end)
-    f.empty=theme.Text(f.list,'',12,false,'muted');theme.Place(f.empty,10,10,WIDTH-60,20,f.list)
+    f.empty=theme.Text(f.list,'',12,false,'muted');theme.Place(f.empty,10,10,width-60,20,f.list)
     local y=LIST_TOP+ROWS*ROW_HEIGHT+6
-    f.status=theme.Text(f,'',11,false,'muted');f.status:SetWordWrap(false);theme.Place(f.status,12,y,WIDTH-24,14,f)
-    f.preview=theme.Text(f,'',13,false,'text');f.preview:SetWordWrap(true);theme.Place(f.preview,12,y+18,WIDTH-24,34,f)
-    f.warning=theme.Text(f,'',11,false,'goldBright');f.warning:SetWordWrap(true);theme.Place(f.warning,12,y+54,WIDTH-24,30,f)
-    f.error=theme.Text(f,'',11,false,'red');f.error:SetWordWrap(true);theme.Place(f.error,12,y+86,WIDTH-24,28,f)
-    local by=HEIGHT-40
-    f.say=theme.Button(f,'',function()send('SAY')end);f.say.channel='SAY';theme.Place(f.say,12,by,170,28,f)
-    f.yell=theme.Button(f,'',function()send('YELL')end);f.yell.channel='YELL';theme.Place(f.yell,190,by,170,28,f)
-    f.custom=theme.Button(f,L('Eigene Vorlage …','Own template …'),addCustom);theme.Place(f.custom,368,by,WIDTH-12-368,28,f)
+    f.status=theme.Text(page,'',11,false,'muted');f.status:SetWordWrap(false);theme.Place(f.status,12,y,width-24,14,page)
+    f.preview=theme.Text(page,'',13,false,'text');f.preview:SetWordWrap(true);theme.Place(f.preview,12,y+18,width-24,34,page)
+    f.warning=theme.Text(page,'',11,false,'goldBright');f.warning:SetWordWrap(true);theme.Place(f.warning,12,y+54,width-24,30,page)
+    f.error=theme.Text(page,'',11,false,'red');f.error:SetWordWrap(true);theme.Place(f.error,12,y+86,width-24,28,page)
+    local by=height-40
+    f.say=theme.Button(page,'',function()send('SAY')end);f.say.channel='SAY';theme.Place(f.say,12,by,170,28,page)
+    f.yell=theme.Button(page,'',function()send('YELL')end);f.yell.channel='YELL';theme.Place(f.yell,190,by,170,28,page)
+    f.custom=theme.Button(page,L('Eigene Vorlage …','Own template …'),addCustom);theme.Place(f.custom,368,by,width-12-368,28,page)
     -- ESC closes the popup through the search field (OnEscapePressed) or the close button. The frame itself takes
     -- no keyboard input: a keyboard-enabled frame would swallow movement keys or need protected calls in combat.
 end
+local function ordered()
+    local list={};for id,spec in pairs(pages)do list[#list+1]={id=id,spec=spec}end
+    table.sort(list,function(a,b)if a.spec.order~=b.spec.order then return a.spec.order<b.spec.order end;return a.id<b.id end)
+    return list
+end
+-- Window size, tab bar (only with more than one page) and page frames.
+local function layout()
+    local theme=T();local list=ordered();local tabs=#list>1
+    local top=TOP+(tabs and TAB_HEIGHT or 0)
+    f:SetSize(WIDTH,top+PAGE_HEIGHT)
+    local width=math.floor((WIDTH-24-(#list-1)*6)/math.max(1,#list))
+    for i,entry in ipairs(list)do
+        local b=f.tabs[entry.id]
+        if not b then local id=entry.id;b=theme.Button(f,'',function()V.SetPage(id)end);f.tabs[id]=b end
+        theme.Place(b,12+(i-1)*(width+6),TOP,width,26,f)
+        b.label:SetText(entry.spec.label());b:SetShown(tabs)
+        local active=entry.id==V.page and tabs
+        b.label:SetTextColor(theme.Color(active and'goldBright'or'text'));b:SetBackdropBorderColor(theme.Color(active and'gold'or'border'))
+    end
+    for _,page in pairs(frames)do theme.Place(page,0,top,WIDTH,PAGE_HEIGHT,f)end
+end
+local function build()
+    if f then return end
+    local theme=T()
+    f=theme.Frame(UIParent,'shell','gold');f:SetFrameStrata('HIGH');f:SetSize(WIDTH,TOP+PAGE_HEIGHT);f:SetPoint('CENTER');f:EnableMouse(true)
+    f:SetClampedToScreen(true);f:Hide()
+    f.tabs={}
+    f.title=theme.Text(f,L('Vorlagen','Templates'),14,true);f.title:SetPoint('TOPLEFT',12,-12)
+    f.close=Z.CloseButton(f,function()V.Close()end,L('Schließen','Close'));theme.Place(f.close,WIDTH-38,7,28,26,f)
+end
+-- Pages: spec={order=,label=function()->string,build=function(page,width,height),refresh=function(page),
+-- show=function(page) (optional, the page became the shown one), hide=function(page) (optional, release the keyboard)}.
+-- build runs once, on the first time the page is shown; page is an own frame below the tab bar.
+function V.RegisterPage(id,spec)
+    if type(id)~='string'or type(spec)~='table'or type(spec.build)~='function'or type(spec.refresh)~='function'or type(spec.label)~='function'then return false end
+    spec.order=tonumber(spec.order)or 100
+    pages[id]=spec
+    if f and f:IsShown()then layout()end
+    return true
+end
+function V.Page(id)return frames[id]end
+local function release()
+    local spec,page=pages[V.page],frames[V.page]
+    if spec and page and spec.hide then pcall(spec.hide,page)end
+end
+function V.SetPage(id)
+    if not f or not pages[id]then return false end
+    if V.page~=id then release()end
+    for other,frame in pairs(frames)do if other~=id then frame:Hide()end end
+    V.page=id
+    local page=frames[id]
+    if not page then page=CreateFrame('Frame',nil,f);frames[id]=page;pages[id].build(page,WIDTH,PAGE_HEIGHT)end
+    page:Show();layout()
+    if f:IsShown()then
+        if pages[id].show then pages[id].show(page)end
+        pages[id].refresh(page)
+    end
+    return true
+end
+function V.Refresh()
+    if not f or not f:IsShown()then return end
+    local spec,page=pages[V.page],frames[V.page]
+    if spec and page then spec.refresh(page)end
+end
+V.RegisterPage('xf',{order=2,label=function()return L('Gegenfraktion','Other faction')end,build=buildXf,refresh=refreshXf,
+    show=function()if f.input then f.input:SetFocus()end end,hide=function()if f.input then f.input:ClearFocus()end end})
 -- channel: 'SAY' | 'YELL' | nil marks the preferred send button. Nothing is sent here.
-function V.Open(channel)
+-- pageId: a registered page; nil (or unknown) opens xf.
+function V.Open(channel,pageId)
     if not Z.ready and Z.Initialize then Z.Initialize()end
     build()
     preferred=(channel=='SAY'or channel=='YELL')and channel or nil
-    errorText=nil;offset=0;f:Show();V.Refresh();f.input:SetFocus()
+    errorText=nil;offset=0;f:Show()
+    V.SetPage(pages[pageId]and pageId or'xf')
 end
 function V.Close()
     if not f then return end
-    f.input:ClearFocus();f:Hide()
+    release();f:Hide()
 end
 function V.IsShown()return f~=nil and f:IsShown()end
