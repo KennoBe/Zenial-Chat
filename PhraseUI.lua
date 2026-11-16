@@ -7,7 +7,7 @@ local TOP,TAB_HEIGHT=36,32 -- title strip; tab bar (only with several pages)
 local ROWS,ROW_HEIGHT=10,34
 local LIST_TOP=104
 local STEP=3 -- list entries per mouse wheel notch
-local f,rows,items,offset,selectedId,category,preferred,errorText,updating
+local f,rows,items,offset,selectedId,category,preferred,errorText,updating,editing
 local pages,frames={},{} -- spec and page frame per page id
 local function T()return Z.Theme end
 local function L(de,en)return Z.L(de,en)end
@@ -26,6 +26,7 @@ local errorTexts={
     too_long=function()return L('Die buchstabierte Phrase ist zu lang.','The spelled phrase is too long.')end,
     invalid_table=function()return L('Die Zeichentabelle enthält ungültige Zeichen. Kalibriere neu oder importiere einen anderen Code.','The character table contains invalid characters. Calibrate again or import another code.')end,
     limit=function()return L('Zu viele eigene Vorlagen.','Too many own templates.')end,
+    missing=function()return L('Diese Vorlage gibt es nicht mehr.','This template no longer exists.')end,
     all_missing=function()return L('Alle Buchstaben fehlen in der Zeichentabelle, es wird nichts gesendet.','All letters are missing from the character table; nothing is sent.')end,
 }
 local function describe(code)local e=errorTexts[code];return e and e()or tostring(code)end
@@ -74,19 +75,25 @@ local function removeCustom(id)
     end)
     if not ok then errorText=L('Die Abfrage konnte nicht geöffnet werden.','The confirmation could not be opened.');V.Refresh()end
 end
-local function addCustom()
-    local U=Z.UI;if not U or not U.Prompt then return end
-    local ok=pcall(function()
-        U.Open()
-        U.Prompt(L('Eigene Vorlage · Englische Phrase (A–Z und Leerzeichen)','Own template · English phrase (A-Z and spaces)'),'',function(en)
-            U.Prompt(L('Eigene Vorlage · Deutsche Beschreibung','Own template · German description'),'',function(de)
-                local id,code=Z.Phrases.AddCustom(de,en)
-                if id then errorText=nil;selectedId=id else errorText=describe(code)end
-                V.Refresh()
-            end)
-        end)
-    end)
-    if not ok then errorText=L('Das Eingabefenster konnte nicht geöffnet werden.','The input window could not be opened.');V.Refresh()end
+-- Own phrases are created and changed in two fields inside the popup (editing={id=nil|own id}).
+local function startEdit(id)
+    local phrase=id and Z.Phrases.Get(id)or nil
+    editing={id=phrase and id or nil};errorText=nil
+    f.editEn:SetText(phrase and phrase.en or'');f.editDe:SetText(phrase and phrase.de or'')
+    V.Refresh();f.editEn:SetFocus()
+end
+local function stopEdit()
+    editing=nil;errorText=nil;f.editEn:ClearFocus();f.editDe:ClearFocus();V.Refresh()
+end
+local function saveEdit()
+    if not editing then return end
+    local P=Z.Phrases;local en,de=f.editEn:GetText(),f.editDe:GetText()
+    local id,code
+    if editing.id then id,code=P.UpdateCustom(editing.id,de,en);if id then id=editing.id end
+    else id,code=P.AddCustom(de,en)end
+    if id then selectedId=id;editing=nil;errorText=nil;f.editEn:ClearFocus();f.editDe:ClearFocus()
+    else errorText=describe(code)end
+    V.Refresh()
 end
 local function row(index)
     if rows[index]then return rows[index]end
@@ -98,6 +105,7 @@ local function row(index)
         if r.phrase then Z.Phrases.ToggleFavorite(r.phrase.id);V.Refresh()end
     end)
     r.star.tip=L('Favorit','Favorite')
+    r.edit=theme.Button(r,L('Ändern','Edit'),function()if r.phrase then startEdit(r.phrase.id)end end)
     if r.RegisterForClicks then r:RegisterForClicks('LeftButtonUp','RightButtonUp')end
     r:SetScript('OnClick',function(self,button)
         local phrase=self.phrase;if not phrase then return end
@@ -124,13 +132,15 @@ local function refreshXf()
         else
             r:Show()
             if item.header then
-                r.phrase=nil;r.title:SetText(item.header);r.title:SetTextColor(theme.Color('goldBright'));r.sub:SetText('')
+                r.phrase=nil;r.title:SetText(item.header);r.title:SetTextColor(theme.Color('goldBright'));r.sub:SetText('');r.edit:Hide()
                 theme.Place(r.title,10,8,width-20,16,r);r.star:Hide()
                 r:SetBackdropBorderColor(theme.Color('line'))
             else
                 local phrase=item.phrase;r.phrase=phrase
                 r.title:SetText(phrase.de);r.title:SetTextColor(theme.Color('text'));r.sub:SetText(phrase.en)
-                theme.Place(r.title,10,3,width-56,15,r);theme.Place(r.sub,10,17,width-56,13,r)
+                local own=phrase.category=='custom'
+                theme.Place(r.title,10,3,width-(own and 126 or 56),15,r);theme.Place(r.sub,10,17,width-(own and 126 or 56),13,r)
+                theme.Place(r.edit,width-108,3,66,ROW_HEIGHT-9,r);r.edit:SetShown(own)
                 theme.Place(r.star,width-38,3,32,ROW_HEIGHT-9,r);r.star:Show()
                 r.star.label:SetText(P.IsFavorite(phrase.id)and'★'or'☆')
                 r:SetBackdropBorderColor(theme.Color(phrase.id==selectedId and'gold'or'border'))
@@ -180,6 +190,9 @@ local function refreshXf()
         button.label:SetTextColor(theme.Color(not enabled and'muted'or mark and'goldBright'or'text'))
         button:SetBackdropBorderColor(theme.Color(mark and'gold'or'border'))
     end
+    local edit=editing~=nil
+    for _,w in ipairs({f.status,f.preview,f.warning,f.say,f.yell,f.custom})do w:SetShown(not edit)end
+    for _,w in ipairs({f.editEnBg,f.editDeBg,f.editEnLabel,f.editDeLabel,f.editSave,f.editCancel})do w:SetShown(edit)end
 end
 -- Runs inside the click handler of the button: one synchronous call, no retry.
 local function send(channel)
@@ -233,7 +246,19 @@ local function buildXf(page,width,height)
     local by=height-40
     f.say=theme.Button(page,'',function()send('SAY')end);f.say.channel='SAY';theme.Place(f.say,12,by,170,28,page)
     f.yell=theme.Button(page,'',function()send('YELL')end);f.yell.channel='YELL';theme.Place(f.yell,190,by,170,28,page)
-    f.custom=theme.Button(page,L('Eigene Vorlage …','Own template …'),addCustom);theme.Place(f.custom,368,by,width-12-368,28,page)
+    f.custom=theme.Button(page,L('Eigene Vorlage …','Own template …'),function()startEdit(nil)end);theme.Place(f.custom,368,by,width-12-368,28,page)
+    -- editor of an own phrase: phrase (A-Z) and description, in place of preview and send buttons
+    local function field(label,y)
+        local caption=theme.Text(page,label,12,false,'muted');theme.Place(caption,12,y+7,104,16,page)
+        local edit,background=theme.Input(page);theme.Place(background,120,y,width-132,28,page)
+        edit:SetScript('OnEscapePressed',stopEdit);edit:SetScript('OnEnterPressed',saveEdit)
+        return edit,background,caption
+    end
+    f.editEn,f.editEnBg,f.editEnLabel=field(L('Phrase A–Z','Phrase A-Z'),y)
+    f.editDe,f.editDeBg,f.editDeLabel=field(L('Beschreibung','Description'),y+34)
+    f.editSave=theme.Button(page,L('Speichern','Save'),saveEdit);theme.Place(f.editSave,12,by,170,28,page)
+    f.editCancel=theme.Button(page,L('Abbrechen','Cancel'),stopEdit);theme.Place(f.editCancel,190,by,170,28,page)
+    page.editEn,page.editDe=f.editEn,f.editDe
     -- ESC closes the popup through the search field (OnEscapePressed) or the close button. The frame itself takes
     -- no keyboard input: a keyboard-enabled frame would swallow movement keys or need protected calls in combat.
 end
@@ -302,7 +327,7 @@ function V.Refresh()
     if spec and page then spec.refresh(page)end
 end
 V.RegisterPage('xf',{order=2,label=function()return L('Gegenfraktion','Other faction')end,build=buildXf,refresh=refreshXf,
-    show=function()if f.input then f.input:SetFocus()end end,hide=function()if f.input then f.input:ClearFocus()end end})
+    show=function()if f.input then f.input:SetFocus()end end,hide=function()editing=nil;if f.input then f.input:ClearFocus();f.editEn:ClearFocus();f.editDe:ClearFocus()end end})
 -- channel: 'SAY' | 'YELL' | nil marks the preferred send button. Nothing is sent here.
 -- pageId: a registered page; nil (or unknown) opens xf.
 function V.Open(channel,pageId)

@@ -155,3 +155,34 @@ function I.Forget(language,fakeWord)
     list[key]=nil
     return true
 end
+-- Learned words of one language as {key=,meaning=} sorted by key; query matches key or meaning. Damaged entries are skipped.
+function I.Learned(language,query)
+    language=validLanguage(language)
+    local db=root()
+    local list=language and db and type(db.learned)=='table'and db.learned[language]
+    local result={}
+    if type(list)~='table'then return result end
+    local terms={};for term in fold(type(query)=='string'and query or''):gmatch('%S+')do terms[#terms+1]=term end
+    for key,meaning in pairs(list)do
+        if type(key)=='string'and type(meaning)=='string'then
+            local hay=fold(key)..'\n'..fold(meaning);local hit=true
+            for _,term in ipairs(terms)do if not hay:find(term,1,true)then hit=false;break end end
+            if hit then result[#result+1]={key=key,meaning=meaning}end
+        end
+    end
+    table.sort(result,function(a,b)return a.key<b.key end)
+    return result
+end
+function I.CountLearned(language)return#I.Learned(language)end
+-- Forgets every learned word of one language; returns how many were stored.
+function I.ForgetAll(language)
+    language=validLanguage(language)
+    local db=root()
+    if not language or not db or type(db.learned)~='table'then return 0 end
+    local list=db.learned[language]
+    if list==nil then return 0 end
+    local count=0
+    if type(list)=='table'then for _ in pairs(list)do count=count+1 end end
+    db.learned[language]={}
+    return count
+end

@@ -121,11 +121,16 @@ function P.Touch(id)
     while#recent>P.MAX_RECENT do table.remove(recent)end
     return true
 end
-function P.AddCustom(de,en)
+local function cleanPhrase(en)
     if type(en)~='string'then return nil,'empty'end
     en=en:upper():gsub('^%s+',''):gsub('%s+$',''):gsub('%s+',' ')
     if en==''then return nil,'empty'end
     if en:find('[^A-Z ]')then return nil,'invalid_chars'end
+    return en
+end
+function P.AddCustom(de,en)
+    local err
+    en,err=cleanPhrase(en);if not en then return nil,err end
     local custom=state().custom
     if#custom>=P.MAX_CUSTOM then return nil,'limit'end
     local top=0
@@ -134,6 +139,17 @@ function P.AddCustom(de,en)
     if type(de)~='string'or de:match('^%s*$')then de=en end
     custom[#custom+1]={id=id,category='custom',de=de,en=en,alt={}}
     return id
+end
+-- Changes an own phrase in place (id, order, favourite and recent stay), same rules as AddCustom.
+function P.UpdateCustom(id,de,en)
+    local phrase
+    for _,entry in ipairs(state().custom)do if entry.id==id then phrase=entry;break end end
+    if not phrase then return nil,'missing'end
+    local err
+    en,err=cleanPhrase(en);if not en then return nil,err end
+    if type(de)~='string'or de:match('^%s*$')then de=en end
+    phrase.de,phrase.en=de,en
+    return true
 end
 function P.RemoveCustom(id)
     local s=state()
