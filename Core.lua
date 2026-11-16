@@ -72,6 +72,7 @@ function Z.IsVisibleAtEnd(key)
 end
 function Z.Changed(reason,key)
     if Z.UI and Z.UI.RequestRefresh then Z.UI.RequestRefresh(reason,key)end
+    if reason=='recovery'and Z.Notifications and Z.Notifications.OnRecovery then pcall(Z.Notifications.OnRecovery,key)end
 end
 function Z.Initialize()
     if Z.ready then return end

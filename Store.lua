@@ -103,11 +103,12 @@ local function applyDefaults(settings)
     -- Left behind by versions with Community chats.
     settings.clubId, settings.streams = nil, nil
     local notificationDefaults = {
-        whispers = { sound = true, toast = true },
+        -- reply: answer line in the notice; only direct messages have one.
+        whispers = { sound = true, toast = true, reply = true },
         guild = { sound = false, toast = false },
         groups = { sound = false, toast = false },
         channels = { sound = false, toast = false },
-        bnet = { sound = true, toast = true },
+        bnet = { sound = true, toast = true, reply = true },
         -- The client plays its own raid warning sound; a second one stays opt-in.
         raidWarning = { sound = false, toast = false },
         opposite = { sound = false, toast = false },

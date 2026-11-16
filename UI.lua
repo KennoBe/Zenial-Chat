@@ -9,6 +9,14 @@ function U.Notice(message)
 end
 function U.RequestRefresh(reason,key)
     U.dirty=true
+    -- A draft stored from outside (the notice) reaches an input nobody is typing in.
+    if reason=='draft'and key and key==U.loadedKey and U.input and not U.input:HasFocus()then
+        local c=Z.store:Get(key)
+        if c and U.input:GetText()~=(c.draft or'')then
+            U.historyPos=nil;U.historyDraft=nil;U.historyValue=nil
+            U.loadingDraft=true;U.input:SetText(c.draft or'');U.loadingDraft=false
+        end
+    end
     if reason=='selection'and key and U.input and U.loadedKey~=key then
         local c=Z.store:Get(key)
         if c then

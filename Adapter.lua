@@ -180,6 +180,23 @@ function A:FailMatching(predicate,errorText)
  for _,a in ipairs(self.attempts)do if a.state=='pending'and clock()-a.at<=10 and predicate(a)then if match then return end;match=a end end
  self:FailAttempt(match,errorText)
 end
+-- True only when the client reports the chat lockdown with exactly true.
+function A:Locked()
+ local info=self.api.C_ChatInfo;return self:Call(type(info)=='table'and info.InChatMessagingLockdown or nil)==true
+end
+-- Opens the game's own chat line for a reply; the player sends from there.
+function A:OpenNative(c,text)
+ local u=self.api.ChatFrameUtil;if type(c)~='table'or type(u)~='table'then return false end
+ if c.kind=='WHISPER'then
+  if type(u.SendTellWithMessage)=='function'then return(pcall(u.SendTellWithMessage,c.target,type(text)=='string'and text or''))end
+  if type(u.SendTell)=='function'then return(pcall(u.SendTell,c.target))end
+ elseif c.kind=='BN_WHISPER'and type(u.SendBNetTell)=='function'then return(pcall(u.SendBNetTell,c.name))end
+ return false
+end
+-- 'pending' or 'failed'; nil once confirmed (the echo removes the attempt) or when the id is unknown.
+function A:AttemptState(id)
+ for _,a in ipairs(self.attempts)do if a.id==id and(a.state=='pending'or a.state=='failed')then return a.state end end
+end
 function A:Recoveries(key)
  local out={};for _,r in ipairs(self.recoveries)do if r.key==key then out[#out+1]=r end end
  -- Lack of an echo proves no failure. Keep the original available for a manual decision.
