@@ -52,7 +52,7 @@ local function startPanel(keepScroll)
 end
 local function resultRow(index)
     if U.searchRows[index]then return U.searchRows[index]end
-    local T=Z.Theme;local row=T.Button(U.searchList,'',nil,'surface')
+    local T=Z.ChatTheme;local row=T.Button(U.searchList,'',nil)
     row.label:Hide()
     row.title=T.Text(row,'',11,true,'goldBright');row.title:SetWordWrap(false)
     row.snippet=T.Text(row,'',12,false,'text');row.snippet:SetWordWrap(false)
@@ -81,7 +81,7 @@ function U.ScrollSearch(delta)
 end
 local function listMessages(run)
     local results=run and run.results or{}
-    local T=Z.Theme;local width=U.searchList:GetWidth();local height=U.searchList:GetHeight()
+    local T=Z.ChatTheme;local width=U.searchList:GetWidth();local height=U.searchList:GetHeight()
     U.searchListScroll=math.min(U.searchListScroll or 0,math.max(0,#results*ROW_HEIGHT-height))
     local first=math.floor(U.searchListScroll/ROW_HEIGHT)+1;local used=0
     for i=first,math.min(#results,first+math.ceil(height/ROW_HEIGHT))do
@@ -109,7 +109,7 @@ end
 -- A bookmark whose message is gone still reads: its own copy is listed and says so.
 local function listBookmarks(run)
     local results=run and run.results or{}
-    local T=Z.Theme;local width=U.searchList:GetWidth();local height=U.searchList:GetHeight()
+    local T=Z.ChatTheme;local width=U.searchList:GetWidth();local height=U.searchList:GetHeight()
     U.searchListScroll=math.min(U.searchListScroll or 0,math.max(0,#results*ROW_HEIGHT-height))
     local first=math.floor(U.searchListScroll/ROW_HEIGHT)+1;local used=0
     for i=first,math.min(#results,first+math.ceil(height/ROW_HEIGHT))do
@@ -148,11 +148,11 @@ function U.RefreshSearchPanel()
     U.searchScopeButton.label:SetText(U.searchScope=='conversation'and conv and Z.Format.ConversationLabel(conv)or Z.L('Alle Gespräche','All conversations'))
     for _,period in ipairs(periods)do if period[1]==(U.searchDays or 0)then U.searchPeriodButton.label:SetText(Z.L(period[2],period[3]))end end
     U.searchHistoryButton:SetShown(Z.store.settings.searchHistoryEnabled==true and not bookmarks)
-    local r,g,b=Z.Theme.Color(bookmarks and'gold'or'border');U.searchBookmarksButton:SetBackdropBorderColor(r,g,b,1)
+    Z.ChatTheme.SetActive(U.searchBookmarksButton,bookmarks)
 end
 function U.LayoutSearch()
     if not U.searchPanel then return end
-    local T=Z.Theme;local w=U.chatPanel:GetWidth();local h=U.chatPanel:GetHeight()
+    local T=Z.ChatTheme;local w=U.chatPanel:GetWidth();local h=U.chatPanel:GetHeight()
     T.Place(U.searchPanel,5,62,w-10,h-68,U.chatPanel)
     local pw=w-10;local ph=h-68
     -- Field, mode button and close button share the top row; without the bookmark module the field keeps the room.
@@ -170,7 +170,7 @@ function U.LayoutSearch()
 end
 local function buildPanel()
     if U.searchPanel then return end
-    local T=Z.Theme
+    local T=Z.ChatTheme
     local f=T.Frame(U.chatPanel,'shell','line');U.searchPanel=f;f:EnableMouse(true);f:Hide()
     f:SetFrameLevel(U.chatPanel:GetFrameLevel()+30)
     U.searchInput,U.searchBox=T.Input(f)
@@ -178,20 +178,20 @@ local function buildPanel()
     U.searchInput:SetScript('OnEscapePressed',function()U.CloseSearch()end)
     U.searchInput:SetScript('OnEnterPressed',function(self)if U.searchMode~='bookmarks'then Z.store:AddSearchHistory(self:GetText())end;self:ClearFocus()end)
     U.searchClose=Z.CloseButton(f,function()U.CloseSearch()end,Z.L('Suche schließen','Close search'))
-    U.searchBookmarksButton=T.Button(f,Z.L('Lesezeichen','Bookmarks'),function()
+    U.searchBookmarksButton=T.Chip(f,Z.L('Lesezeichen','Bookmarks'),function()
         U.searchMode=U.searchMode=='bookmarks'and'messages'or'bookmarks';startPanel()
     end);U.searchBookmarksButton.tip=Z.L('Lesezeichen zeigen','Show bookmarks')
-    U.searchScopeButton=T.Button(f,'',function(self)
+    U.searchScopeButton=T.Dropdown(T.Button(f,'',function(self)
         local items={{text=Z.L('Alle Gespräche','All conversations'),run=function()U.searchScope='all';startPanel()end}}
         local conv=U.searchKey and Z.store:Get(U.searchKey)
         if conv then items[2]={text=Z.Format.ConversationLabel(conv),run=function()U.searchScope='conversation';startPanel()end}end
         U.ShowMenu(self,items)
-    end)
-    U.searchPeriodButton=T.Button(f,'',function(self)
+    end))
+    U.searchPeriodButton=T.Dropdown(T.Button(f,'',function(self)
         local items={}
         for _,period in ipairs(periods)do items[#items+1]={text=Z.L(period[2],period[3]),run=function()U.searchDays=period[1];startPanel()end}end
         U.ShowMenu(self,items)
-    end)
+    end))
     U.searchHistoryButton=T.Button(f,'…',function(self)
         local items={};local list=Z.store:SearchHistory()
         for i=#list,1,-1 do local text=list[i];items[#items+1]={text=text,run=function()U.searchInput:SetText(text);U.searchInput:SetCursorPosition(#text)end}end
@@ -208,8 +208,7 @@ local function openPanel(mode,scopeKey,query)
     U.searchMode=mode;U.panelSearch=nil -- the other mode's list must not be drawn for a moment
     -- The title bar button also works from the settings: back to the chat first.
     if mode=='bookmarks'and U.settingsPanel:IsShown()then
-        if U.menu then U.menu:Hide()end
-        U.settingsPanel:Hide();U.settingsNav:Hide();U.listPanel:Show();U.chatPanel:Show();U.back:Hide();U.Layout()
+        U.CloseSettings();U.Layout()
     end
     local current=Z.store:Get(Z.store.db.ui.selected)
     U.searchScope=scopeKey and'conversation'or'all'

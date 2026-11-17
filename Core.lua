@@ -1,6 +1,6 @@
 local addonName,Z=...
 _G.ZenialChat=Z
-Z.VERSION='0.5.0'
+Z.VERSION='0.6.0'
 function Z.L(de,en)return GetLocale and GetLocale()=='deDE'and de or en or de end
 function Z.Safe(...)
     for i=1,select('#',...)do
@@ -14,20 +14,12 @@ function Z.Call(fn,...)
     if type(fn)~='function'then return nil end
     local ok,a,b,c,d,e=pcall(fn,...);if ok and Z.Safe(a,b,c,d,e)then return a,b,c,d,e end
 end
--- Native close button when the template exists on this client; otherwise the themed text button.
--- Both variants run exactly `fn` on click and show the same tooltip.
+-- The close button of the shared window frame (native template where the client has it, else a plain button);
+-- it runs exactly `fn` on click and shows `tip` as its tooltip.
 function Z.CloseButton(parent,fn,tip)
-    local b
-    if CreateFrame then
-        local ok,frame=pcall(CreateFrame,'Button',nil,parent,'UIPanelCloseButton')
-        if ok and type(frame)=='table'then
-            b=frame;b.zenialNative=true
-            b:SetScript('OnClick',fn)
-            b:SetScript('OnEnter',function(self)if self.tip and Z.Theme then Z.Theme.Tooltip(self,self.tip)end end)
-            b:SetScript('OnLeave',function()if GameTooltip then GameTooltip:Hide()end end)
-        end
-    end
-    if not b then b=Z.Theme.Button(parent,'×',fn)end
+    local b=Z.Window.CloseButton(parent,fn)
+    b:SetScript('OnEnter',function(self)if self.tip and Z.ChatTheme then Z.ChatTheme.Tooltip(self,self.tip)end end)
+    b:SetScript('OnLeave',function()if GameTooltip then GameTooltip:Hide()end end)
     b.tip=tip;return b
 end
 function Z.Now()return Z.Call(GetServerTime)or Z.Call(time)or 0 end

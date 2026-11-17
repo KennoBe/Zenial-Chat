@@ -3,14 +3,12 @@ local U,N=Z.UI,Z.NativeChat
 local O={};Z.NativeChatOptions=O
 local draft
 local function options()if not draft then draft=N.Options(N.Settings())end;return draft end
-local function check(add,label,key)
-    add('check',label,{get=function()return options()[key]end,set=function(value)options()[key]=value end})
-end
 local function preview(mode)
-    local plan,reason=N.Preview(mode,options());local T=Z.Theme
+    local plan,reason=N.Preview(mode,options());local T=Z.ChatTheme
     if not U.nativePreview then
-        local f=T.Frame(U.frame,'shell','gold');U.nativePreview=f;f:SetPoint('CENTER');f:SetFrameStrata('DIALOG');f:EnableMouse(true)
-        f.title=T.Text(f,'',18,true,'goldBright')
+        local f=T.Dialog(U.frame);U.nativePreview=f;f:SetPoint('CENTER');f:SetFrameStrata('DIALOG');f:EnableMouse(true)
+        f.title=Z.Kit.Text(f,'','title')
+        f.header=Z.Kit.DialogHeader(f,f.title,function()f:Hide()end)
         f.scroll=CreateFrame('ScrollFrame',nil,f);f.scroll:SetClipsChildren(true);f.scroll:EnableMouseWheel(true)
         f.content=CreateFrame('Frame',nil,f.scroll);f.scroll:SetScrollChild(f.content)
         f.body=T.Text(f.content,'',12,false);f.body:SetWordWrap(true)
@@ -21,17 +19,16 @@ local function preview(mode)
             local ok,message=N.Apply(f.plan)
             if ok then draft=nil;f:Hide();U.RebuildOptions()
             else f.status:SetText(message);f.apply:Disable();f.plan=nil end
-        end)
+        end,'primary')
         f.scroll:SetScript('OnMouseWheel',function(self,delta)
             self:SetVerticalScroll(math.max(0,math.min(f.maxScroll or 0,self:GetVerticalScroll()-delta*40)))
         end)
     end
     local f=U.nativePreview;f.plan=plan
     local width=math.min(680,UIParent:GetWidth()-40);local height=math.min(520,UIParent:GetHeight()-60)
-    f:SetSize(width,height)
-    T.Place(f.title,18,14,width-36,28,f)
+    f:SetSize(width,height);f.header:SetSubtitle('')
     f.title:SetText(mode=='restore'and Z.L('Gesicherte Ausgangskonfiguration','Saved original configuration')or Z.L('Blizzard-Chat einrichten · Vorschau','Set up Blizzard chat · Preview'))
-    T.Place(f.scroll,18,52,width-36,height-160,f)
+    T.Place(f.scroll,18,58,width-36,height-166,f)
     f.content:SetWidth(width-42)
     f.body:SetWidth(width-48);f.body:SetText(plan and table.concat(plan.rows,'\n\n')or reason)
     local bodyHeight=f.body:GetStringHeight()+12
@@ -44,49 +41,56 @@ local function preview(mode)
     f.apply:SetEnabled(plan~=nil);f:Show()
 end
 O.Preview=preview
-function O.Add(add)
-    add('section',Z.L('Blizzard Chat','Blizzard Chat'))
-    add('note',Z.L('Optionaler Assistent für den nativen Chat. Häkchen sind zunächst ein Entwurf; erst die bestätigte Vorschau ändert den Blizzard-Chat.','Optional setup for native chat. Checkboxes are a draft; only the confirmed preview changes Blizzard chat.'))
-    local conflict=N.Conflict();if conflict then add('note',conflict)end
-    add('action',Z.L('Chat automatisch einrichten …','Set up chat automatically …'),{run=function()preview('setup')end})
-    add('section',Z.L('Geplante Tab-Aufteilung','Planned tab layout'))
+-- The rows of the Blizzard Chat page. h: note, toggle, select, t of the settings (Options.lua).
+function O.Build(form,h)
+    local t,note=h.t,h.note
+    local function check(de,en,key)
+        form:Toggle({label=t(de,en),get=function()return options()[key]end,set=function(value)options()[key]=value end})
+    end
+    local function choice(de,en,key,list)
+        form:Select({label=t(de,en),options=list,get=function()return options()[key]end,set=function(v)options()[key]=v end})
+    end
+    form:Card(t('Blizzard Chat','Blizzard Chat'))
+    note(form,'Optionaler Assistent für den nativen Chat. Häkchen sind zunächst ein Entwurf; erst die bestätigte Vorschau ändert den Blizzard-Chat.','Optional setup for native chat. Checkboxes are a draft; only the confirmed preview changes Blizzard chat.')
+    form:Note({anchor='conflict',text=function()return N.Conflict()or''end})
+    form:Buttons({anchor='setup',{text=t('Chat automatisch einrichten …','Set up chat automatically …'),variant='primary',onClick=function()preview('setup')end}})
+    form:Card(t('Geplante Tab-Aufteilung','Planned tab layout'))
     local details={
-        general=Z.L('Behält alle bisherigen Nachrichtenarten und Kanäle. Die anderen Tabs sind zusätzliche Ansichten.','Keeps all existing message types and channels. The other tabs are additional views.'),
-        guild=Z.L('Gilde und Offizier.','Guild and officer.'),
-        group=Z.L('Gruppe, Schlachtzug, Instanz und Schlachtzugswarnungen – einschließlich Anführer.','Party, raid, instance and raid warnings, including leaders.'),
-        whisper=Z.L('Flüstern und Battle.net.','Whispers and Battle.net.'),
-        system=Z.L('Loot, Ruf, Erfahrung, Quest- und sonstige Systemmeldungen.','Loot, reputation, experience, quest and other system messages.'),
+        general=t('Behält alle bisherigen Nachrichtenarten und Kanäle. Die anderen Tabs sind zusätzliche Ansichten.','Keeps all existing message types and channels. The other tabs are additional views.'),
+        guild=t('Gilde und Offizier.','Guild and officer.'),
+        group=t('Gruppe, Schlachtzug, Instanz und Schlachtzugswarnungen – einschließlich Anführer.','Party, raid, instance and raid warnings, including leaders.'),
+        whisper=t('Flüstern und Battle.net.','Whispers and Battle.net.'),
+        system=t('Loot, Ruf, Erfahrung, Quest- und sonstige Systemmeldungen.','Loot, reputation, experience, quest and other system messages.'),
     }
     for _,d in ipairs(N.definitions)do
         local key=d.key
-        add('check',Z.L(d.de,d.en),{get=function()return options().include[key]end,set=function(v)options().include[key]=v end})
-        add('note',details[key])
+        form:Toggle({anchor='tab:'..key,label=t(d.de,d.en),get=function()return options().include[key]end,set=function(v)options().include[key]=v end})
+        form:Note({text=details[key]})
     end
-    add('note',Z.L('Allgemein bleibt unverändert. Nicht ausgewählte Tabs werden nicht umkonfiguriert.','General stays unchanged. Excluded tabs are not reconfigured.'))
-    add('action',Z.L('Vorschau der geplanten Änderungen …','Preview planned changes …'),{run=function()preview('setup')end})
-    add('section',Z.L('Native Tab-Zähler','Native tab counters'))
-    check(add,Z.L('Ungelesen-Zähler aktivieren','Enable unread counters'),'unread')
-    check(add,Z.L('Bei neuen Nachrichten dezent aufleuchten','Flash subtly for new messages'),'flash')
-    add('note',Z.L('Eigene und nicht sicher auswertbare Nachrichten werden nicht gezählt. Zähler gelten nur für neue zugestellte Chatzeilen mit lesbarer Nachrichten-ID; sie starten nach /reload bei null.','Own messages and unsafe metadata are not counted. Counters cover newly delivered chat lines with readable message IDs; they restart at zero after /reload.'))
+    note(form,'Allgemein bleibt unverändert. Nicht ausgewählte Tabs werden nicht umkonfiguriert.','General stays unchanged. Excluded tabs are not reconfigured.')
+    form:Buttons({anchor='planPreview',{text=t('Vorschau der geplanten Änderungen …','Preview planned changes …'),onClick=function()preview('setup')end}})
+    form:Card(t('Native Tab-Zähler','Native tab counters'))
+    check('Ungelesen-Zähler aktivieren','Enable unread counters','unread')
+    check('Bei neuen Nachrichten dezent aufleuchten','Flash subtly for new messages','flash')
+    note(form,'Eigene und nicht sicher auswertbare Nachrichten werden nicht gezählt. Zähler gelten nur für neue zugestellte Chatzeilen mit lesbarer Nachrichten-ID; sie starten nach /reload bei null.','Own messages and unsafe metadata are not counted. Counters cover newly delivered chat lines with readable message IDs; they restart at zero after /reload.')
     for _,entry in ipairs(N.ListTabs())do local id=tostring(entry.id)
-        add('check',string.format(Z.L('Zähler: %s (#%d)','Counter: %s (#%d)'),entry.name,entry.id),{get=function()return options().unreadTabs[id]~=false end,set=function(v)if v then options().unreadTabs[id]=nil else options().unreadTabs[id]=false end end})
+        form:Toggle({anchor='counter:'..id,label=string.format(Z.L('Zähler: %s (#%d)','Counter: %s (#%d)'),entry.name,entry.id),
+            get=function()return options().unreadTabs[id]~=false end,set=function(v)if v then options().unreadTabs[id]=nil else options().unreadTabs[id]=false end end})
     end
-    add('section',Z.L('Native Darstellung','Native appearance'))
-    if N.ZenialUIStyles()then add('note',Z.L('Das Aussehen der Chatfenster steuert ZENIAL UI.','ZENIAL UI controls the look of the chat windows.'))
+    form:Card(t('Native Darstellung','Native appearance'))
+    if N.ZenialUIStyles()then note(form,'Das Aussehen der Chatfenster steuert ZENIAL UI.','ZENIAL UI controls the look of the chat windows.')
     else
-        check(add,Z.L('Kompakte Tab-Schrift','Compact tab text'),'compactTabs')
-        check(add,Z.L('Zusätzliche Chat-Buttons ausblenden','Hide additional chat buttons'),'hideButtons')
-        check(add,Z.L('Chat-Hintergrundelemente ausblenden','Hide chat background elements'),'hideBackground')
+        check('Kompakte Tab-Schrift','Compact tab text','compactTabs')
+        check('Zusätzliche Chat-Buttons ausblenden','Hide additional chat buttons','hideButtons')
+        check('Chat-Hintergrundelemente ausblenden','Hide chat background elements','hideBackground')
     end
-    add('choice',Z.L('Zeitstempel','Timestamps'),{get=function()return options().timestamps end,set=function(v)options().timestamps=v end,
-        choices={{'keep',Z.L('Unverändert','Keep current')},{'off',Z.L('Aus','Off')},{'hm','HH:MM'},{'hms','HH:MM:SS'}}})
-    add('choice',Z.L('Klassenfarben für Namen','Class colors for names'),{get=function()return options().classColors end,set=function(v)options().classColors=v end,
-        choices={{'keep',Z.L('Unverändert','Keep current')},{'on',Z.L('An','On')},{'off',Z.L('Aus','Off')}}})
-    add('note',Z.L('Zeitstempel und Klassenfarben verwenden native Einstellungen und gelten für den gesamten Blizzard-Chat. Eine native Option für kürzere Kanalpräfixe ist auf Forever nicht belegt; die Formate bleiben unverändert.','Timestamps and class colors use native settings and affect all Blizzard chat. A native shorter-channel-prefix option is not verified on Forever, so formats remain unchanged.'))
-    add('action',Z.L('Nur Zähler & Darstellung übernehmen …','Apply counters & appearance only …'),{run=function()preview('display')end})
-    add('note',Z.L('Ändert keine Tab-Aufteilung; zeigt vorher die betroffenen Tabs und Einstellungen.','Leaves the tab layout unchanged; lists affected tabs and settings first.'))
-    add('section',Z.L('Sicherung & Wiederherstellung','Backup & restore'))
-    add('note',Z.L('Die erste bestätigte Einrichtung sichert die betroffene Ausgangskonfiguration pro Charakter. Weitere Einrichtungen überschreiben diese Sicherung nicht. Chatverlauf ist nicht Bestandteil der Sicherung.','The first confirmed setup saves the affected original configuration per character. Later setups preserve that backup. Chat history is not included.'))
-    add('action',Z.L('Standardkonfiguration wiederherstellen …','Restore original configuration …'),{run=function()preview('restore')end})
-    add('note',Z.L('Stellt die gesicherte Konfiguration vor ZENIAL wieder her. Nur vom Assistenten neu angelegte Tabs werden nach Vorschau geschlossen.','Restores the saved configuration from before ZENIAL. Only assistant-created tabs are closed, after preview.'))
+    choice('Zeitstempel','Timestamps','timestamps',{{'keep',Z.L('Unverändert','Keep current')},{'off',Z.L('Aus','Off')},{'hm','HH:MM'},{'hms','HH:MM:SS'}})
+    choice('Klassenfarben für Namen','Class colors for names','classColors',{{'keep',Z.L('Unverändert','Keep current')},{'on',Z.L('An','On')},{'off',Z.L('Aus','Off')}})
+    note(form,'Zeitstempel und Klassenfarben verwenden native Einstellungen und gelten für den gesamten Blizzard-Chat. Eine native Option für kürzere Kanalpräfixe ist auf Forever nicht belegt; die Formate bleiben unverändert.','Timestamps and class colors use native settings and affect all Blizzard chat. A native shorter-channel-prefix option is not verified on Forever, so formats remain unchanged.')
+    form:Buttons({anchor='displayPreview',{text=t('Nur Zähler & Darstellung übernehmen …','Apply counters & appearance only …'),onClick=function()preview('display')end}})
+    note(form,'Ändert keine Tab-Aufteilung; zeigt vorher die betroffenen Tabs und Einstellungen.','Leaves the tab layout unchanged; lists affected tabs and settings first.')
+    form:Card(t('Sicherung & Wiederherstellung','Backup & restore'))
+    note(form,'Die erste bestätigte Einrichtung sichert die betroffene Ausgangskonfiguration pro Charakter. Weitere Einrichtungen überschreiben diese Sicherung nicht. Chatverlauf ist nicht Bestandteil der Sicherung.','The first confirmed setup saves the affected original configuration per character. Later setups preserve that backup. Chat history is not included.')
+    form:Buttons({anchor='restore',{text=t('Standardkonfiguration wiederherstellen …','Restore original configuration …'),onClick=function()preview('restore')end}})
+    note(form,'Stellt die gesicherte Konfiguration vor ZENIAL wieder her. Nur vom Assistenten neu angelegte Tabs werden nach Vorschau geschlossen.','Restores the saved configuration from before ZENIAL. Only assistant-created tabs are closed, after preview.')
 end

@@ -282,19 +282,19 @@ local function personTooltip(owner,conv,msg)
     if class then parts[#parts+1]=class end
     if person and person.raceName then parts[#parts+1]=person.raceName end
     if conv.kind=='BN_WHISPER'and conv.target then parts[#parts+1]=conv.target end
-    Z.Theme.Tooltip(owner,plain,table.concat(parts,' · '))
+    Z.ChatTheme.Tooltip(owner,plain,table.concat(parts,' · '))
 end
 local function handleLinkEnter(self,link)
     self.overLink=true
     if not Z.Safe(link)or type(link)~='string'then return end
     local msg=self.message;local conv=Z.store:Get(Z.store.db.ui.selected)
-    if link:match('^zchaturl:')then Z.Theme.Tooltip(self,link:match('^zchaturl:(.+)$')or'',Z.L('Klicken zum Kopieren. Addons können keinen Browser öffnen.','Click to copy. Addons cannot open a browser.'));return end
+    if link:match('^zchaturl:')then Z.ChatTheme.Tooltip(self,link:match('^zchaturl:(.+)$')or'',Z.L('Klicken zum Kopieren. Addons können keinen Browser öffnen.','Click to copy. Addons cannot open a browser.'));return end
     if link:match('^zchatxf:')then
-        Z.Theme.Tooltip(self,Z.L('Bedeutung festlegen','Set meaning'),Z.L('Klick: Bedeutung festlegen …','Click: set meaning …'));return
+        Z.ChatTheme.Tooltip(self,Z.L('Bedeutung festlegen','Set meaning'),Z.L('Klick: Bedeutung festlegen …','Click: set meaning …'));return
     end
     if link:match('^zchatxfd:')then return end
     if link:match('^zchattime:')then
-        if msg then Z.Theme.Tooltip(self,Z.Format.FullTime(msg.at),Z.L('Shift-Klick zitiert die Nachricht in die Eingabe.','Shift-click quotes the message into the input.'))end
+        if msg then Z.ChatTheme.Tooltip(self,Z.Format.FullTime(msg.at),Z.L('Shift-Klick zitiert die Nachricht in die Eingabe.','Shift-click quotes the message into the input.'))end
         return
     end
     if link:match('^player:')or link:match('^BNplayer:')then
@@ -307,7 +307,7 @@ end
 local function handleLinkLeave(self)self.overLink=false;if GameTooltip then GameTooltip:Hide()end end
 local function bubble(u,index)
     if u.bubbles[index]then return u.bubbles[index]end
-    local T=Z.Theme;local row=CreateFrame('Frame',nil,u.canvas)
+    local T=Z.ChatTheme;local row=CreateFrame('Frame',nil,u.canvas)
     row.date=T.Text(row,'',11,false,'muted');row.date:SetJustifyH('CENTER')
     row.icon=T.Icon(row,{kind='WHISPER'})
     row.author=T.Text(row,'',12,true,'goldBright');row.author:SetWordWrap(false)
@@ -348,7 +348,7 @@ local function xfIcon(msg)
     return ok and type(icon)=='string'and icon or''
 end
 local function placeBubble(u,row,conv,msg,info,w,text,s,highlighted)
-    local T=Z.Theme;local style=s.layoutStyle;local own=msg.outgoing==true
+    local T=Z.ChatTheme;local style=s.layoutStyle;local own=msg.outgoing==true
     local classic=style=='classic';local compact=style=='compact'
     local class=senderClass(conv,msg)
     local plainName=Z.Format.SenderLabel(conv,msg)
@@ -427,7 +427,7 @@ function R.Render(u,secondPass)
         if nearBottom then loadNewer(u)end
         R.Index(u,conv)
     end
-    local T=Z.Theme;local h=u.viewport:GetHeight();local w=u.viewport:GetWidth();local s=Z.store.settings
+    local T=Z.ChatTheme;local h=u.viewport:GetHeight();local w=u.viewport:GetWidth();local s=Z.store.settings
     u.scroll=math.max(0,math.min(u.maximum or 0,u.scroll or 0))
     local first,last=Z.Layout.VisibleRange(u.prefix,u.scroll,h,2);local used=0;local firstChanged
     for i=first,last do
@@ -486,10 +486,8 @@ function R.Build(u)
     u.canvas=CreateFrame('Frame',nil,u.viewport);u.viewport:SetScrollChild(u.canvas)
     u.bubbles={};u.prefix={0};u.rowMessages={};u.scroll=0;u.atEnd=true;u.measured={};u.indexDirty=true;u.indexFull=true
     u.viewport:EnableMouseWheel(true);u.viewport:SetScript('OnMouseWheel',function(_,delta)u.ScrollTo(u.scroll-delta*60)end)
-    u.scrollbar=CreateFrame('Slider',nil,u.chatPanel,'BackdropTemplate');Z.Theme.Panel(u.scrollbar,'field','line')
-    u.scrollbar:SetOrientation('VERTICAL');u.scrollbar:SetValueStep(1);u.scrollbar:SetThumbTexture('Interface\\Buttons\\UI-ScrollBar-Knob')
-    u.scrollbar:SetScript('OnValueChanged',function(_,value)if not u.scrollBarUpdating then u.ScrollTo(value)end end)
-    u.empty=Z.Theme.Text(u.viewport,Z.L('Hier beginnt euer Gespräch.','Your conversation starts here.'),14,false,'muted');u.empty:SetJustifyH('CENTER')
-    u.newest=Z.Theme.Button(u.chatPanel,Z.L('Zu den neuesten Nachrichten','Go to newest messages'),function()R.GoNewest(u)end,'own')
+    u.scrollbar=Z.ChatTheme.ScrollBar(u.chatPanel,function(value)if not u.scrollBarUpdating then u.ScrollTo(value)end end)
+    u.empty=Z.ChatTheme.Text(u.viewport,Z.L('Hier beginnt euer Gespräch.','Your conversation starts here.'),14,false,'muted');u.empty:SetJustifyH('CENTER')
+    u.newest=Z.ChatTheme.Button(u.chatPanel,Z.L('Zu den neuesten Nachrichten','Go to newest messages'),function()R.GoNewest(u)end)
     u.newest:Hide()
 end

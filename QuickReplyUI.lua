@@ -26,7 +26,7 @@ local function fit()
     return math.max(1,math.min(ROWS,math.floor(room/ROW_HEIGHT)))
 end
 local function placeList()
-    local T=Z.Theme;local f=U.quickList;local shown=fit()
+    local T=Z.ChatTheme;local f=U.quickList;local shown=fit()
     local width=math.min(LIST_WIDTH,U.chatPanel:GetWidth()-20)
     local height=46+shown*ROW_HEIGHT+4+28+8
     T.Place(f,10,math.max(4,U.chatPanel:GetHeight()-132-height-4),width,height,U.chatPanel)
@@ -37,7 +37,7 @@ end
 local function refreshList()
     local f=U.quickList
     if not f or not f:IsShown()then return end
-    local T=Z.Theme;local P=Z.Phrases
+    local T=Z.ChatTheme;local P=Z.Phrases
     local list=items()
     local width,shown=placeList()
     offset=math.max(0,math.min(math.max(0,#list-shown),offset))
@@ -57,8 +57,8 @@ end
 local function scroll(_,delta)offset=offset-delta*STEP;refreshList()end
 local function buildList()
     if U.quickList then return end
-    local T=Z.Theme
-    local f=T.Frame(U.chatPanel,'shell','gold');U.quickList=f;f:EnableMouse(true);f:Hide()
+    local T=Z.ChatTheme
+    local f=T.Menu(U.chatPanel);U.quickList=f;f:EnableMouse(true);f:Hide()
     f:SetFrameLevel(U.chatPanel:GetFrameLevel()+40)
     f:EnableMouseWheel(true);f:SetScript('OnMouseWheel',scroll)
     U.quickSearch,f.searchBox=T.Input(f)
@@ -68,7 +68,7 @@ local function buildList()
     U.quickSearch:SetScript('OnEnterPressed',function(self)self:ClearFocus()end)
     f.rows={}
     for i=1,ROWS do
-        local r=T.Button(f,'',nil,'surface');r.label:Hide();r.quickRow=true
+        local r=T.Button(f,'',nil);r.label:Hide();r.quickRow=true
         r.title=T.Text(r,'',12,true,'text');r.title:SetWordWrap(false)
         r.sub=T.Text(r,'',11,false,'muted');r.sub:SetWordWrap(false)
         r:SetScript('OnClick',function(self)if self.template then U.InsertTemplate(self.template.id)end end)
@@ -95,9 +95,9 @@ end
 -- The input makes room for the button; without a usable conversation it keeps its original place and width.
 function U.LayoutQuick()
     if not U.composer or not U.metrics then return end
-    local T=Z.Theme;local show=usable(selected())
+    local T=Z.ChatTheme;local show=usable(selected())
     if show and not U.quick then
-        U.quick=T.Button(U.composer,'',function()U.ToggleQuick()end);T.ButtonIcon(U.quick,T.icons.messages)
+        U.quick=T.Button(U.composer,'',function()U.ToggleQuick()end);T.Glyph(U.quick,'note',20)
         U.quick.tip=L('Schnellantworten','Quick replies')
     end
     local content=U.chatPanel:GetWidth()

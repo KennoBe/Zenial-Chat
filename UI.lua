@@ -50,7 +50,7 @@ function U.UpdateAlpha()
     if not U.frame then return end
     local active=U.frame:IsMouseOver()or U.input:HasFocus()or U.search:HasFocus()
     local value=active and Z.store.settings.alphaActive or Z.store.settings.alphaInactive
-    if U.currentAlpha~=value then U.currentAlpha=value;Z.Theme.Opacity(value)end
+    if U.currentAlpha~=value then U.currentAlpha=value;Z.ChatTheme.Opacity(value)end
 end
 function U.ResetGeometry()
     local d=Z.store.db.ui;d.width,d.height,d.x,d.y=1060,680,0,0;Z.store.settings.locked=false
@@ -125,12 +125,18 @@ function U.Select(key,messageId,terms)
     U.highlightId=messageId;U.highlightKey=key;U.highlightTerms=terms
     U.input:ClearFocus();if U.CloseQuick then U.CloseQuick()end;Z.store:Select(key);Z.store:SetClosed(key,false)
     U.loadingDraft=true;U.input:SetText(c.draft or'');U.loadingDraft=false;U.loadedKey=key
-    U.settingsPanel:Hide();U.chatPanel:Show();U.back:Hide();U.settingsNav:Hide();U.listPanel:Show()
+    U.CloseSettings()
     local remembered=not messageId and old and old.key~=key and Z.store.settings.rememberScroll and(c.unread or 0)==0 and U.scrollMemory[key]or nil
     U.indexDirty=true;U.indexFull=true;U.indexSignature=nil;U.anchor=remembered;U.scroll=0;U.atEnd=not messageId and not remembered
     U.windowKey=nil;Z.Transcript.PrepareWindow(U,c,messageId or remembered and remembered.id or nil)
     U.frame:Show();U.Layout();U.Refresh()
     if messageId then Z.Transcript.Reveal(U,c,messageId)end
+end
+-- Back from the settings to the conversation list and the chat.
+function U.CloseSettings()
+    if U.menu then U.menu:Hide()end
+    if Z.Form and Z.Form.ClosePopups then Z.Form.ClosePopups()end
+    U.settingsPanel:Hide();U.listPanel:Show();U.chatPanel:Show();U.back:Hide()
 end
 function U.Open()
     if not Z.ready then Z.Initialize()end
@@ -144,7 +150,7 @@ end
 function U.ShowMenu(anchor,items,atCursor)
     if not atCursor and U.menu and U.menu:IsShown()and U.menu.anchor==anchor then U.menu:Hide();return end
     if U.menu then U.menu:Hide()end
-    local T=Z.Theme;local menu=U.menu or T.Frame(U.frame,'shell','gold');U.menu=menu
+    local T=Z.ChatTheme;local menu=U.menu or T.Menu(U.frame);U.menu=menu
     menu.anchor=not atCursor and anchor or nil
     menu:SetFrameStrata('TOOLTIP');menu:SetSize(250,#items*30+12);menu:ClearAllPoints()
     if atCursor then
@@ -160,18 +166,22 @@ function U.ShowMenu(anchor,items,atCursor)
     end
     menu.buttons=menu.buttons or{}
     for i,item in ipairs(items)do
-        local b=menu.buttons[i]or T.Button(menu,'',nil);menu.buttons[i]=b
+        local b=menu.buttons[i]
+        if not b then
+            b=T.Button(menu,'',nil,'ghost');menu.buttons[i]=b
+            b.label:ClearAllPoints();b.label:SetPoint('TOPLEFT',b,'TOPLEFT',10,-3);b.label:SetPoint('BOTTOMRIGHT',b,'BOTTOMRIGHT',-8,3);b.label:SetJustifyH('LEFT')
+        end
         b.label:SetText(item.text);b:SetScript('OnClick',function()menu:Hide();item.run()end);T.Place(b,6,6+(i-1)*30,238,28,menu);b:Show()
     end
     for i=#items+1,#menu.buttons do menu.buttons[i]:Hide()end;menu:Show()
 end
 function U.Confirm(text,action)
-    local T=Z.Theme
+    local T=Z.ChatTheme
     U.input:ClearFocus();U.search:ClearFocus()
     if not U.confirm then
-        local f=T.Frame(U.frame,'shell','gold');f:SetFrameStrata('DIALOG');f:SetSize(360,150);f:SetPoint('CENTER');f.label=T.Text(f,'',14,false)
+        local f=T.Dialog(U.frame);f:SetFrameStrata('DIALOG');f:SetSize(360,150);f:SetPoint('CENTER');f.label=T.Text(f,'',14,false)
         T.Place(f.label,18,18,324,65,f);f.label:SetWordWrap(true)
-        f.yes=T.Button(f,Z.L('Löschen','Delete'),function()local callback=f.action;f:Hide();callback()end)
+        f.yes=T.Button(f,Z.L('Löschen','Delete'),function()local callback=f.action;f:Hide();callback()end,'danger')
         f.no=T.Button(f,Z.L('Abbrechen','Cancel'),function()f:Hide()end)
         T.Place(f.yes,18,108,150,28,f);T.Place(f.no,192,108,150,28,f);U.confirm=f
     end
@@ -180,7 +190,7 @@ end
 -- large is for long texts such as an excerpt or an export.
 function U.ShowCopy(text,title,large)
     if not U.copy then
-        local T=Z.Theme;local f=T.Frame(U.frame,'shell','gold');f:SetPoint('CENTER');f:SetFrameStrata('DIALOG')
+        local T=Z.ChatTheme;local f=T.Dialog(U.frame);f:SetPoint('CENTER');f:SetFrameStrata('DIALOG')
         f.edit,f.background=T.Input(f);f.edit:SetMultiLine(true)
         -- Long text scrolls inside the frame instead of running out of it.
         f.scroll=CreateFrame('ScrollFrame',nil,f.background);f.scroll:SetClipsChildren(true);f.scroll:SetPoint('TOPLEFT',f.background,'TOPLEFT',2,-2);f.scroll:SetPoint('BOTTOMRIGHT',f.background,'BOTTOMRIGHT',-2,2)
@@ -192,16 +202,15 @@ function U.ShowCopy(text,title,large)
             local top=f.scroll:GetVerticalScroll();local view=f.scroll:GetHeight();y=-y
             if y<top then f.scroll:SetVerticalScroll(y)elseif y+height>top+view then f.scroll:SetVerticalScroll(y+height-view)end
         end)
-        f.title=T.Text(f,'',13,true);f.title:SetPoint('TOPLEFT',12,-12)
-        f.close=Z.CloseButton(f,function()f.edit:ClearFocus();f:Hide()end,Z.L('Schließen','Close'))
+        f.title=Z.Kit.Text(f,'','title')
+        f.header=Z.Kit.DialogHeader(f,f.title,function()f.edit:ClearFocus();f:Hide()end);f.close=f.header.close
         f.edit:SetScript('OnEscapePressed',function(self)self:ClearFocus();f:Hide()end);U.copy=f
     end
     local width,height=large and 620 or 420,large and 420 or 180
     do
-        local f=U.copy;local T=Z.Theme
-        f:SetSize(width,height);T.Place(f.background,12,40,width-24,height-60,f)
-        f.title:SetWidth(width-70);T.Place(f.close,width-38,7,28,26,f)
-        f.edit:SetWidth(width-32);f.edit:SetHeight(height-64)
+        local f=U.copy;local T=Z.ChatTheme
+        f:SetSize(width,height);T.Place(f.background,12,54,width-24,height-66,f);f.header:SetSubtitle('')
+        f.edit:SetWidth(width-32);f.edit:SetHeight(height-70)
     end
     -- The same native dialog serves selection/search/new-target workflows.
     -- Remove old callbacks before assigning content to a different workflow.
@@ -302,12 +311,12 @@ function U.MessageMenu(anchor,msg)
 end
 local function conversationRow(index)
     if U.rows[index]then return U.rows[index]end
-    local T=Z.Theme;local row=CreateFrame('Button',nil,U.listCanvas,'BackdropTemplate');T.Panel(row,'sidebar','line')
+    local T=Z.ChatTheme;local row=CreateFrame('Button',nil,U.listCanvas,'BackdropTemplate');T.Panel(row,'sidebar','line')
     row.icon=T.Icon(row,{});row.name=T.Text(row,'',14,true);row.preview=T.Text(row,'',12,false,'muted')
     row.name:SetWordWrap(false);row.preview:SetWordWrap(false)
     row.divider=T.Line(row,4,48,100)
     row.time=T.Text(row,'',10,false,'muted');row.time:SetJustifyH('RIGHT')
-    row.badge=T.Frame(row,'red','red');row.count=T.Text(row.badge,'',11,true);row.count:SetPoint('CENTER');row.count:SetJustifyH('CENTER')
+    row.badge=T.Frame(row,'red','red');row.count=T.Text(row.badge,'',11,true,'shell');row.count:SetPoint('CENTER');row.count:SetJustifyH('CENTER')
     row:RegisterForClicks('LeftButtonUp','RightButtonUp')
     row:SetScript('OnClick',function(self,button)
         if button=='RightButton'then
@@ -350,7 +359,7 @@ local function whisperIcon(c)
 end
 function U.RefreshList()
     local run=U.query~=''and U.sidebarSearch or nil
-    local T=Z.Theme;local list=Z.store:List(U.query or'',run and run.hits or nil);local width=U.metrics.sidebarWidth-16
+    local T=Z.ChatTheme;local list=Z.store:List(U.query or'',run and run.hits or nil);local width=U.metrics.sidebarWidth-16
     local compact=Z.store.settings.sidebarCompact and not U.metrics.iconOnly;local showPreview=U.metrics.showPreview and not compact
     local height=U.listViewport:GetHeight();local entries={};local y=0;local prior
     if run and not run.empty and(run.count>0 or not run.done)then entries[1]={summary=true,y=0,height=34};y=34 end
@@ -370,7 +379,7 @@ function U.RefreshList()
         if top+entry.height>=0 and top<height then
             if entry.summary then
                 summaryShown=true
-                if not U.searchSummary then U.searchSummary=T.Button(U.listCanvas,'',function()U.OpenSearch(nil,U.query)end,'own')end
+                if not U.searchSummary then U.searchSummary=T.Button(U.listCanvas,'',function()U.OpenSearch(nil,U.query)end)end
                 U.searchSummary.label:SetText(run.done and string.format(Z.L('%d Treffer anzeigen','Show %d results'),run.count)or string.format(Z.L('Suche … %d Treffer','Searching … %d results'),run.count))
                 T.Place(U.searchSummary,0,top,width,entry.height-4,U.listCanvas);U.searchSummary:Show()
             elseif entry.header then
@@ -409,7 +418,7 @@ function U.Refresh()
     -- The header always names the conversation in full; an own display name comes first.
     U.channelName:SetText(c and(c.alias and c.alias~=''and c.alias..' ('..c.name..')'or c.name)or Z.L('Deine Gespräche','Your conversations'))
     U.channelDetail:SetText(c and caption(Z.Store.Group(c.kind))or Z.L('Wähle ein Gespräch oder starte eine Nachricht.','Choose a conversation or start a message.'))
-    Z.Theme.SetIcon(U.channelIcon,c or{kind='COMMUNITY'})
+    Z.ChatTheme.SetIcon(U.channelIcon,c or{kind='COMMUNITY'})
     -- The opposite-faction conversation is read-only: a phrase button replaces the input.
     local readOnly=c~=nil and c.kind=='XFACTION'
     if c and not readOnly then U.input:Enable()else U.input:Disable()end;U.send:SetEnabled(c~=nil and not readOnly)
@@ -419,7 +428,7 @@ function U.Refresh()
     if U.LayoutQuick then U.LayoutQuick()end
     Z.Transcript.Render(U)
     U.RefreshRecovery()
-    Z.Theme.ButtonIcon(U.lock,Z.store.settings.locked and'Interface\\PetBattles\\PetBattle-LockIcon'or'Interface\\Icons\\INV_Misc_Key_01',nil,24)
+    Z.ChatTheme.ButtonIcon(U.lock,Z.store.settings.locked and'Interface\\PetBattles\\PetBattle-LockIcon'or'Interface\\Icons\\INV_Misc_Key_01',nil,22)
     U.lock.tip=Z.store.settings.locked and Z.L('Fenster gesperrt · Zum Entsperren klicken','Window locked · Click to unlock')or Z.L('Fenster entsperrt · Zum Sperren klicken','Window unlocked · Click to lock')
     U.UpdateAlpha()
     if U.RefreshSearchPanel then U.RefreshSearchPanel()end
@@ -449,7 +458,7 @@ function U.RefreshRecovery()
 end
 function U.Layout()
     if not U.frame or U.layoutRunning then return end;U.layoutRunning=true
-    local T=Z.Theme;local s=Z.store.settings
+    local T=Z.ChatTheme;local s=Z.store.settings
     local w,h,scale=Z.Layout.Clamp(U.frame:GetWidth(),U.frame:GetHeight(),s.scale,UIParent:GetWidth(),UIParent:GetHeight())
     U.frame:SetScale(scale);U.frame:SetSize(w,h);U.frame:SetResizeBounds(540,360,math.max(540,UIParent:GetWidth()/scale-16),math.max(360,UIParent:GetHeight()/scale-16))
     U.metrics=Z.Layout.Resolve(w,h,s,U.metrics and U.metrics.mode)
@@ -486,9 +495,8 @@ function U.Layout()
     T.Place(U.newest,math.max(12,(content-270)/2),h-181,math.min(270,content-28),28,U.chatPanel)
     T.Place(U.recovery,14,h-181,math.min(300,content-28),28,U.chatPanel)
     T.Place(U.grip,w-25,h-25,20,20,U.frame);U.grip:SetShown(not s.locked)
-    T.Place(U.settingsPanel,sw+7,43,content,h-50,U.frame)
-    T.Place(U.settingsNav,7,43,sw-2,h-50,U.frame)
-    T.Place(U.back,content-172,10,160,30,U.settingsPanel)
+    T.Place(U.settingsPanel,7,43,w-14,h-50,U.frame)
+    T.Place(U.back,w-14-172,8,160,28,U.settingsPanel)
     U.frame:SetMovable(not s.locked);U.frame:SetResizable(not s.locked)
     if U.LayoutOptions then U.LayoutOptions()end
     if U.LayoutQuick then U.LayoutQuick()end
@@ -497,8 +505,8 @@ function U.Layout()
 end
 function U.Build()
     if U.frame then return end
-    local T=Z.Theme;local d=Z.store.db.ui
-    local f=T.Frame(UIParent,'shell','gold');f.opacityMultiplier=0;U.frame=f;f:SetFrameStrata('MEDIUM');f:SetClampedToScreen(true);f:EnableMouse(true);f:SetMovable(true);f:SetResizable(true)
+    local T=Z.ChatTheme;local d=Z.store.db.ui
+    local f=CreateFrame('Frame',nil,UIParent,'BackdropTemplate');T.Window(f);U.frame=f;f:SetFrameStrata('MEDIUM');f:SetClampedToScreen(true);f:EnableMouse(true);f:SetMovable(true);f:SetResizable(true)
     f:SetSize(d.width,d.height);f:SetPoint('CENTER',UIParent,'CENTER',d.x,d.y);f:Hide()
     U.titleBar=T.Frame(f,'shell','line');U.titleBar:EnableMouse(true);U.titleBar:RegisterForDrag('LeftButton')
     U.brand=T.Icon(U.titleBar,{kind='COMMUNITY'})
@@ -506,11 +514,11 @@ function U.Build()
     U.titleBar:SetScript('OnDragStart',function()if not Z.store.settings.locked then f:StartMoving()end end)
     U.titleBar:SetScript('OnDragStop',function()f:StopMovingOrSizing();U.SaveGeometry()end)
     -- Left of the gear. Hidden while the overview (SearchUI) or the bookmark module is missing.
-    U.bookmarks=T.Button(U.titleBar,'★',function()if U.OpenBookmarks then U.OpenBookmarks()end end);U.bookmarks.tip=Z.L('Lesezeichen','Bookmarks')
-    T.ButtonIcon(U.bookmarks,T.icons.history,nil,24)
-    U.gear=T.Button(U.titleBar,'⚙',function()U.OpenSettings('appearance')end);U.gear.tip=Z.L('Einstellungen','Settings')
-    T.ButtonIcon(U.gear,'Interface\\WorldMap\\GEAR_64GREY',nil,24)
-    U.lock=T.Button(U.titleBar,'◇',function()U.SetSetting('locked',not Z.store.settings.locked)end);U.lock.tip=Z.L('Position und Größe sperren','Lock position and size')
+    U.bookmarks=T.Button(U.titleBar,'',function()if U.OpenBookmarks then U.OpenBookmarks()end end,'ghost');U.bookmarks.tip=Z.L('Lesezeichen','Bookmarks')
+    T.Glyph(U.bookmarks,'star',22)
+    U.gear=T.Button(U.titleBar,'',function()U.OpenSettings('appearance')end,'ghost');U.gear.tip=Z.L('Einstellungen','Settings')
+    T.Glyph(U.gear,'settings',22)
+    U.lock=T.Button(U.titleBar,'',function()U.SetSetting('locked',not Z.store.settings.locked)end,'ghost');U.lock.tip=Z.L('Position und Größe sperren','Lock position and size')
     U.close=Z.CloseButton(U.titleBar,function()f:Hide()end,Z.L('Schließen','Close'))
     U.listPanel=T.Frame(f,'sidebar','line')
     U.search,U.searchBackground=T.Input(U.listPanel);U.query=''
@@ -523,22 +531,22 @@ function U.Build()
     U.search:SetScript('OnEditFocusGained',function()U.searchHint:Hide()end)
     U.search:SetScript('OnEditFocusLost',function()U.searchHint:SetShown(U.search:GetText()=='')end)
     U.search:SetScript('OnEscapePressed',function(self)self:ClearFocus()end)
-    U.searchIcon=T.Button(U.listPanel,'⌕',function()
+    U.searchIcon=T.Button(U.listPanel,'',function()
         U.ShowCopy(U.query,Z.L('Gespräche und Nachrichten suchen','Search conversations and messages'));U.copy.edit:SetScript('OnTextChanged',function(self)U.query=self:GetText();U.QueryChanged()end)
         U.copy.edit:SetScript('OnEnterPressed',function(self)self:ClearFocus();U.copy:Hide()end)
     end);U.searchIcon.tip=Z.L('Gespräche und Nachrichten suchen','Search conversations and messages')
-    T.ButtonIcon(U.searchIcon,'Interface\\Icons\\INV_Misc_Spyglass_03','communities-icon-searchmagnifyingglass')
+    T.Glyph(U.searchIcon,'search',20)
     U.listViewport=CreateFrame('ScrollFrame',nil,U.listPanel);U.listViewport:SetClipsChildren(true)
     U.listCanvas=CreateFrame('Frame',nil,U.listViewport);U.listViewport:SetScrollChild(U.listCanvas)
     U.listViewport:EnableMouseWheel(true);U.listViewport:SetScript('OnMouseWheel',function(_,delta)U.listScroll=math.max(0,U.listScroll-delta*50);U.RefreshList()end)
     U.listEmpty=T.Text(U.listCanvas,Z.L('Noch keine Gespräche.\n\nStarte über ••• eine Nachricht.','No conversations yet.\n\nStart a message with •••.'),12,false,'muted');U.listEmpty:SetWordWrap(true)
     U.chatPanel=T.Frame(f,'shell','line')
     U.channelIcon=T.Icon(U.chatPanel,{kind='COMMUNITY'});U.channelName=T.Text(U.chatPanel,'',20,true);U.channelDetail=T.Text(U.chatPanel,'',12,false,'muted')
-    U.more=T.Button(U.chatPanel,'•••',function(self)
+    U.more=T.Button(U.chatPanel,'',function(self)
         local c=selected();if c then U.ConversationMenu(self,c)
         else U.StartConversation()end
     end);U.more.tip=Z.L('Gesprächsmenü · Neue Nachricht','Conversation menu · New message')
-    T.ButtonIcon(U.more,T.icons.WHISPER,nil,22)
+    T.Glyph(U.more,'whisper',20)
     Z.Transcript.Build(U)
     U.composer=T.Frame(U.chatPanel,'shell','line');U.composer.opacityMultiplier=0
     U.input,U.inputBackground=T.Input(U.composer);U.input:SetMultiLine(true);U.input:SetHyperlinksEnabled(true)
@@ -553,15 +561,15 @@ function U.Build()
     U.input:SetScript('OnEnterPressed',function(self)if IsShiftKeyDown and IsShiftKeyDown()then self:Insert('\n')else U.Submit()end end)
     U.input:SetScript('OnEscapePressed',function(self)if self:HasFocus()then self:ClearFocus()else f:Hide()end end)
     U.input:SetScript('OnArrowPressed',function(_,key)U.HistoryArrow(key)end)
-    U.send=T.Button(U.composer,'',U.Submit,'own');T.ButtonIcon(U.send,'Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up');U.send.tip=Z.L('Nachricht senden · Enter','Send message · Enter')
-    U.reply=T.Button(U.composer,Z.L('Mit Phrase antworten','Reply with a phrase'),function()if Z.Opposite then Z.Opposite.OpenPhrases()end end,'own');U.reply:Hide()
+    U.send=T.Button(U.composer,'',U.Submit,'primary');T.Glyph(U.send,'chevronRight',16);U.send.tip=Z.L('Nachricht senden · Enter','Send message · Enter')
+    U.reply=T.Button(U.composer,Z.L('Mit Phrase antworten','Reply with a phrase'),function()if Z.Opposite then Z.Opposite.OpenPhrases()end end,'primary');U.reply:Hide()
     U.notice=T.Text(U.chatPanel,'',11,false,'goldBright');U.notice:SetWordWrap(true);U.notice:Hide()
     U.recovery=T.Button(U.chatPanel,Z.L('Fehlgeschlagenen Text wiederherstellen','Restore failed message'),function()U.RestoreRecovery(U.recoveryAttempt)end);U.recovery:Hide()
-    U.settingsPanel=T.Frame(f,'shell','line');U.settingsPanel:Hide();U.settingsNav=T.Frame(f,'sidebar','line');U.settingsNav:Hide()
-    U.back=T.Button(U.settingsPanel,Z.L('Zurück zum Chat','Back to chat'),function()
-        if U.menu then U.menu:Hide()end
-        U.settingsPanel:Hide();U.settingsNav:Hide();U.listPanel:Show();U.chatPanel:Show();U.back:Hide();U.Layout()
-    end);U.back:Hide()
+    -- The settings replace the list and the conversation: a title strip with the way back, the view below it (Options.lua).
+    U.settingsPanel=T.Frame(f,'shell','line');U.settingsPanel:Hide()
+    U.optionsTitle=T.Text(U.settingsPanel,Z.L('Einstellungen','Settings'),20,true)
+    U.settingsBody=CreateFrame('Frame',nil,U.settingsPanel)
+    U.back=T.Button(U.settingsPanel,Z.L('Zurück zum Chat','Back to chat'),function()U.CloseSettings();U.Layout()end);U.back:Hide()
     U.grip=CreateFrame('Button',nil,f);U.grip.texture=U.grip:CreateTexture(nil,'ARTWORK');U.grip.texture:SetAllPoints();U.grip.texture:SetTexture('Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up')
     U.grip:SetScript('OnMouseDown',function()if not Z.store.settings.locked then f:StartSizing('BOTTOMRIGHT')end end)
     U.grip:SetScript('OnMouseUp',function()f:StopMovingOrSizing();U.Layout();U.SaveGeometry()end)
@@ -605,7 +613,7 @@ function U.CreateMinimapButton()
     if U.minimapButton or not Minimap then return end
     local settings=Z.store.settings
     U.minimapButton=Z.Launcher.CreateMinimapButton({
-        name='ZenialChatMinimapButton',icon=Z.Theme.icons.COMMUNITY,defaultAngle=200,
+        name='ZenialChatMinimapButton',icon=Z.ChatTheme.icons.COMMUNITY,defaultAngle=200,
         getAngle=function()return settings.minimapAngle end,
         setAngle=function(angle)settings.minimapAngle=angle end,
         onClick=function(self,mouseButton)

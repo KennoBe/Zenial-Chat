@@ -1,21 +1,24 @@
 local _,Z=...
 local U=Z.UI
-local pages={{'appearance','Darstellung','Appearance'},{'messages','Nachrichten','Messages'},{'behavior','Verhalten','Behavior'},{'notifications','Benachrichtigungen','Notifications'},{'history','Verlauf & Daten','History & data'},{'blizzard','Blizzard Chat','Blizzard Chat'}}
-local function add(kind,label,options)
-    local row=options or{};row.kind=kind;row.label=label;U.optionSpecs[#U.optionSpecs+1]=row;return row
+-- The settings are a view inside the chat window (Window, embedded) with one Form per page.
+local Form,Window=Z.Form,Z.Window
+local function t(de,en)return{de,en}end
+local function tr(value)
+    if type(value)=='table'then return Z.L(value[1],value[2])end
+    return value
 end
--- A limit that would delete something asks first; nothing is removed if the answer is no.
-local function retentionSetter(key)
-    return function(v)
-        local s=Z.store.settings
-        local count=key=='retentionCount'and v or s.retentionCount
-        local days=key=='retentionDays'and v or s.retentionDays
-        local n=Z.store:CountPrunable(count,days)
-        local function apply()s[key]=v;Z.store:PruneAll();U.RebuildOptions()end
-        if n>0 then U.Confirm(string.format(Z.L('%d Nachrichten werden dauerhaft gelöscht. Fortfahren?','%d messages will be deleted for good. Continue?'),n),apply)
-        else apply()end
-    end
-end
+local pages={
+    {key='appearance',title=t('Darstellung','Appearance')},
+    {key='messages',title=t('Nachrichten','Messages')},
+    {key='behavior',title=t('Verhalten','Behavior')},
+    {key='notifications',title=t('Benachrichtigungen','Notifications')},
+    {key='history',title=t('Verlauf & Daten','History & data')},
+    {key='blizzard',title=t('Blizzard Chat','Blizzard Chat')},
+}
+U.settingsPages=pages
+local function percent(v)return math.floor(v*100+.5)..' %'end
+local function whole(v)return tostring(math.floor(v))end
+local function seconds(v)return math.floor(v)..' s'end
 local function sizeLabel(bytes)
     if bytes>=1048576 then return string.format('%.1f MB',bytes/1048576)end
     return string.format('%.0f KB',bytes/1024)
@@ -27,366 +30,403 @@ local function soundChoices()
     end
     return list
 end
-local function buildSpecs()
-    local s=Z.store.settings;U.optionSpecs={}
-    if U.settingsPage=='blizzard'then Z.NativeChatOptions.Add(add)
-    elseif U.settingsPage=='appearance'then
-        add('section',Z.L('Darstellung','Appearance'))
-        add('slider',Z.L('Hintergrund aktiv','Active background'),{key='alphaActive',min=0,max=1,step=.01,format=function(v)return math.floor(v*100+.5)..' %'end})
-        add('slider',Z.L('Hintergrund inaktiv','Inactive background'),{key='alphaInactive',min=0,max=1,step=.01,format=function(v)return math.floor(v*100+.5)..' %'end})
-        add('note',Z.L('Schrift und Symbole bleiben gut lesbar.','Text and icons stay fully legible.'))
-        add('section',Z.L('Größe & Lesbarkeit','Size & readability'))
-        add('slider',Z.L('UI-Skalierung','UI scale'),{key='scale',min=.75,max=1.5,step=.05,format=function(v)return math.floor(v*100+.5)..' %'end})
-        add('slider',Z.L('Schriftgröße','Font size'),{key='fontSize',min=12,max=20,step=1,format=function(v)return tostring(math.floor(v))end})
-        add('choice',Z.L('Seitenleiste','Sidebar'),{key='sidebar',choices={{'auto',Z.L('Automatisch','Automatic')},{'names',Z.L('Namen','Names')},{'icons',Z.L('Symbole','Icons')}}})
-        add('note',Z.L('Bei wenig Platz entfallen zuerst Vorschauen, danach Namen.','At smaller widths, previews hide first, then names.'))
-        add('check',Z.L('Nachrichtenvorschau anzeigen','Show last-message previews'),{key='previews'})
-        add('check',Z.L('Kompakte Seitenleiste','Compact sidebar'),{key='sidebarCompact'})
-        add('choice',Z.L('Kanal- und Gruppennamen','Channel and group names'),{key='channelLabels',choices={{'full',Z.L('Vollständig','Full')},{'short',Z.L('Kurz (Gilde: G, Schlachtzug: SZ)','Short (Guild: G, Raid: R)')},{'number',Z.L('Kanalnummer','Channel number')}}})
-        add('note',Z.L('Eigene Anzeigenamen vergibst du im Gesprächsmenü •••. Die Kanalnummer gilt nur für Kanäle, Gruppen zeigen dort ihr Kürzel.','Set your own display names in the ••• conversation menu. The number applies to channels only; groups show their short name.'))
-        add('section',Z.L('Fenster','Window'))
-        add('check',Z.L('Position und Größe sperren','Lock position and size'),{key='locked'})
-        add('action',Z.L('Position und Größe zurücksetzen','Reset position and size'),{run=U.ResetGeometry})
-        add('check',Z.L('Minimap-Icon ausblenden','Hide minimap icon'),{key='minimapHidden',after=U.ApplyMinimapVisibility})
-        add('section',Z.L('Ausblenden','Fading'))
-        add('check',Z.L('Fenster bei Inaktivität ausblenden','Fade the window when idle'),{key='fadeEnabled'})
-        add('slider',Z.L('Ausblenden nach','Fade after'),{key='fadeAfter',min=5,max=300,step=5,format=function(v)return math.floor(v)..' s'end})
-        add('slider',Z.L('Sichtbarkeit danach','Visibility afterwards'),{key='fadeAlpha',min=0,max=1,step=.05,format=function(v)return math.floor(v*100+.5)..' %'end})
-        add('note',Z.L('Überfahren, Tippen oder eine neue Nachricht blenden das Fenster wieder ein.','Hovering, typing or a new message bring the window back.'))
-    elseif U.settingsPage=='messages'then
-        add('section',Z.L('Namen','Names'))
-        add('choice',Z.L('Namensformat','Name format'),{key='nameFormat',choices={{'full',Z.L('Vorname Nachname','First Last')},{'first',Z.L('Nur Vorname','First name only')},{'last',Z.L('Nur Nachname','Last name only')},{'initialLast',Z.L('V. Nachname','F. Last')},{'firstInitial',Z.L('Vorname N.','First L.')},{'initials',Z.L('Initialen','Initials')}}})
-        add('note',Z.L('Gilt nur für Charaktere mit genau Vor- und Nachname. Andere Namen und Battle.net-Konten bleiben vollständig. Beim Überfahren steht immer der ganze Name da.','Applies only to characters with exactly a first and a last name. Other names and Battle.net accounts stay complete. Hovering always shows the whole name.'))
-        add('check',Z.L('Klassenfarben für Namen','Class colors for names'),{key='classColors'})
-        add('section',Z.L('Symbole','Icons'))
-        add('choice',Z.L('Symbol neben Nachrichten','Icon next to messages'),{key='senderIcon',choices={{'class',Z.L('Klasse','Class')},{'race',Z.L('Rasse','Race')},{'none',Z.L('Keines','None')}}})
-        add('choice',Z.L('Rassensymbole','Race icons'),{key='raceIconQuality',choices={{'hd',Z.L('Hohe Auflösung','High resolution')},{'sd',Z.L('Standard','Standard')}}})
-        add('slider',Z.L('Symbolgröße','Icon size'),{key='iconSize',min=16,max=48,step=2,format=function(v)return tostring(math.floor(v))end})
-        add('note',Z.L('Die Rasse ist erst nach einer neuen Nachricht der Person bekannt. Bis dahin steht dort die Klasse, ist auch die unbekannt, das Chat-Symbol.','A race is known only after a new message from that person. Until then the class is shown and, if that is unknown too, the chat icon.'))
-        add('section',Z.L('Zeit','Time'))
-        add('choice',Z.L('Zeitstempel','Timestamps'),{key='timeFormat',choices={{'hm','14:05'},{'hms','14:05:30'},{'date','06.11.2026 14:05'},{'relative',Z.L('Heute 14:05','Today 14:05')},{'off',Z.L('Aus','Off')}}})
-        add('choice',Z.L('Uhrzeit','Clock'),{key='timeZone',choices={{'local',Z.L('Lokale Zeit','Local time')},{'server',Z.L('Serverzeit','Server time')}}})
-        add('note',Z.L('Die Serverzeit gilt mit dem heutigen Abstand auch für ältere Nachrichten; über eine Zeitumstellung hinweg kann sie um eine Stunde abweichen. Überfahren zeigt Datum und Sekunden, Shift-Klick zitiert.','Server time applies today\'s offset to older messages too, so across a clock change it can be off by an hour. Hovering shows date and seconds, shift-click quotes.'))
-        add('check',Z.L('Datumstrenner anzeigen','Show date separators'),{key='dateSeparators'})
-        add('section',Z.L('Layout','Layout'))
-        add('choice',Z.L('Nachrichtenlayout','Message layout'),{key='layoutStyle',choices={{'bubbles',Z.L('Sprechblasen','Bubbles')},{'compact',Z.L('Kompakt','Compact')},{'classic',Z.L('Klassische Liste','Classic list')}}})
-        add('check',Z.L('Aufeinanderfolgende Nachrichten gruppieren','Group consecutive messages'),{key='groupMessages'})
-        add('choice',Z.L('Schriftart','Font'),{key='fontFace',choices={{'noto','Noto Sans'},{'friz','Friz Quadrata'},{'arial','Arial Narrow'},{'morpheus','Morpheus'},{'skurri','Skurri'}}})
-        add('choice',Z.L('Textkontur','Text outline'),{key='fontOutline',choices={{'none',Z.L('Keine','None')},{'OUTLINE',Z.L('Dünn','Thin')},{'THICKOUTLINE',Z.L('Dick','Thick')}}})
-        add('slider',Z.L('Zeilenabstand','Line spacing'),{key='lineSpacing',min=0,max=8,step=1,format=function(v)return tostring(math.floor(v))end})
-        add('section',Z.L('Links & Zitate','Links & quotes'))
-        add('check',Z.L('Webadressen erkennen','Detect web addresses'),{key='urlLinks'})
-        add('note',Z.L('Ein Klick zeigt die Adresse zum Kopieren. Addons können keinen Browser öffnen.','A click shows the address for copying. Addons cannot open a browser.'))
-        add('choice',Z.L('Zitat-Format','Quote format'),{key='quoteFormat',choices={{'text',Z.L('Nur Text','Text only')},{'sender',Z.L('Mit Absender','With sender')},{'time',Z.L('Mit Absender und Zeit','With sender and time')}}})
-    elseif U.settingsPage=='behavior'then
-        add('section',Z.L('Eingabe & Fenster','Input & window'))
-        add('check',Z.L('Eingabe beim Öffnen fokussieren','Focus composer when opening'),{key='focusOnOpen'})
-        add('note',Z.L('Enter sendet · Shift+Enter fügt einen Zeilenumbruch ein. Escape löst zuerst den Eingabefokus.','Enter sends · Shift+Enter inserts a new line. Escape first releases input focus.'))
-        add('check',Z.L('Gesendete Nachrichten mit Pfeil hoch/runter abrufen','Recall sent messages with arrow up/down'),{key='inputHistory'})
-        add('choice',Z.L('Verlauf der Eingabe','Input history'),{key='inputHistoryScope',choices={{'conversation',Z.L('Je Gespräch','Per conversation')},{'global',Z.L('Für alle Gespräche','Across conversations')}}})
-        add('check',Z.L('Leseposition je Gespräch merken','Remember reading position per conversation'),{key='rememberScroll'})
-        add('check',Z.L('Suchverlauf speichern','Keep search history'),{key='searchHistoryEnabled'})
-        add('note',Z.L('Tastenkürzel: WoW → Tastenbelegung → Zenial Chat. /zchat öffnet das Fenster.','Shortcut: WoW → Key Bindings → Zenial Chat. /zchat opens the window.'))
-        add('section',Z.L('Öffentliche & eigene Kanäle','Public & custom channels'))
-        add('check',Z.L('Öffentliche Kanäle im Messenger anbieten','Offer public channels in Messenger'),{key='publicChannels',after=function()U.RebuildOptions()end})
-        if s.publicChannels then
-            local channels=Z.adapter:JoinedChannels()
-            for _,channel in ipairs(channels)do
-                local name=channel.name
-                add('check',name,{get=function()return s.enabledChannels[name:lower()]==true end,set=function(value)Z.adapter:SetChannel(name,value)end})
-            end
-            if#channels==0 then add('note',Z.L('Noch keine beigetretenen Kanäle verfügbar.','No joined channels available yet.'))end
-        end
-        -- Absent while a running client has not yet picked up the new TOC files (update without restart).
-        if Z.Calibration then
-        add('section',Z.L('Kalibrierung','Calibration'))
-        add('note',Z.L('Für Spieler der anderen Fraktion: Ein Mitspieler dieser Fraktion mit Zenial Chat steht in Sagen-Reichweite. Jeder Klick sendet genau eine Zeile.','For the other faction: a player of that faction with Zenial Chat stands within say range. Each click sends exactly one line.'))
-        add('note',(Z.Calibration.StatusText(Z.Calibration.OwnLanguageId())))
-        add('action',Z.L('Probe senden','Send probe'),{run=function()
-            local ok,code=Z.Calibration.SendNextProbe()
-            if ok then U.Notice(Z.L('Probe gesendet.','Probe sent.'))
-            elseif code=='done'then Z.Calibration.ResetSender();U.Notice(Z.L('Alle Proben gesendet. Der nächste Klick beginnt von vorn.','All probes sent. The next click starts over.'))
-            else U.Notice(Z.L('Probe konnte nicht gesendet werden.','The probe could not be sent.'))end
-        end})
-        add('action',Z.L('Zuhören (Ziel)','Listen (target)'),{run=function()
-            if Z.Calibration.ListenTarget(false)then U.Notice(Z.L('Höre dem Ziel zu (10 Minuten).','Listening to the target (10 minutes).'))
-            else U.Notice(Z.L('Wähle zuerst einen Spieler als Ziel.','Target a player first.'))end
-        end})
-        add('action',Z.L('Ergebnis exportieren','Export result'),{run=function()
-            local code=Z.Calibration.ExportCode()
-            if code then U.ShowCopy(code,Z.L('Kalibrierung für den Sender · Strg+C','Calibration for the sender · Ctrl+C'))
-            else U.Notice(Z.L('Noch kein Ergebnis.','No result yet.'))end
-        end})
-        add('action',Z.L('Code importieren','Import code'),{run=function()
-            U.Prompt(Z.L('Kalibrierungscode einfügen · Enter','Paste calibration code · Enter'),'',function(value)
-                local ok=Z.Calibration.Import(value)
-                U.Notice(ok and Z.L('Tabelle importiert.','Table imported.')or Z.L('Der Code ist ungültig.','The code is invalid.'))
-                U.RebuildOptions()
-            end)
-        end})
-        add('action',Z.L('Wortprobe senden','Send word probe'),{run=function()
-            local ok,code=Z.Calibration.SendNextWordProbe()
-            if ok then U.Notice(Z.L('Wortprobe gesendet.','Word probe sent.'))
-            elseif code=='done'then Z.Calibration.ResetSender();U.Notice(Z.L('Alle Wortproben gesendet. Der nächste Klick beginnt von vorn.','All word probes sent. The next click starts over.'))
-            else U.Notice(Z.L('Wortprobe konnte nicht gesendet werden.','The word probe could not be sent.'))end
-        end})
-        add('action',Z.L('Wortproben zuhören (Ziel)','Listen for word probes (target)'),{run=function()
-            if Z.Calibration.ListenTarget(true)then U.Notice(Z.L('Höre dem Ziel zu (10 Minuten).','Listening to the target (10 minutes).'))
-            else U.Notice(Z.L('Wähle zuerst einen Spieler als Ziel.','Target a player first.'))end
-        end})
-        add('action',Z.L('Wortproben-Ergebnis exportieren','Export word probe result'),{run=function()
-            local text=Z.Calibration.ExportWords()
-            if text then U.ShowCopy(text,Z.L('Wortpaare für GarbleData.lua · Strg+C','Word pairs for GarbleData.lua · Ctrl+C'),true)
-            else U.Notice(Z.L('Noch kein Ergebnis.','No result yet.'))end
-        end})
-        end
-        add('section',Z.L('Übersetzungshinweis','Translation hint'))
-        add('check',Z.L('Übersetzungshinweis im Chat anzeigen','Show translation hint in chat'),{key='xfChatHint'})
-        add('note',Z.L('Der Hinweis erscheint erst, wenn die Client-Unterstützung bestätigt ist.','The hint appears only once client support has been confirmed.'))
-    elseif U.settingsPage=='notifications'then
-        add('section',Z.L('Neue Nachrichten','New messages'))
-        add('note',Z.L('Stummgeschaltete Gespräche behalten ihren Ungelesen-Zähler, spielen aber keinen Ton und zeigen keinen Hinweis.','Muted conversations keep unread counts, but do not play a sound or show a notification.'))
-        add('note',Z.L('Der Client spielt bei Flüstern und Schlachtzugswarnungen selbst einen Ton. Ein Ton hier kommt zusätzlich hinzu; pro Sekunde spielt Zenial Chat höchstens einen.','The client plays its own sound for whispers and raid warnings. A sound here comes on top; Zenial Chat plays at most one per second.'))
-        add('matrixhead','')
-        for _,group in ipairs({{'whispers','Flüstern','Whispers'},{'bnet','Battle.net','Battle.net'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'raidWarning','Schlachtzugswarnungen','Raid warnings'},{'channels','Öffentliche Kanäle','Public channels'},{'opposite','Gegnerische Fraktion','Opposite faction'}})do
-            local key=group[1];local canReply=key=='whispers'or key=='bnet'
-            local notices={{'off',Z.L('Kein Hinweis','No notice')},{'small',Z.L('Kleiner Hinweis','Small notice')}}
-            if canReply then notices[3]={'reply',Z.L('Hinweis mit Antwortfeld','Notice with reply field')}end
-            add('matrix',Z.L(group[2],group[3]),{key=key,
-                -- off: no notice; small: notice only; reply: notice with a reply line (direct messages only, no key elsewhere)
-                notice={choices=notices,get=function()
-                    local p=s.notifications[key];if p.toast~=true then return'off'end
-                    return canReply and p.reply==true and'reply'or'small'
-                end,set=function(value)
-                    local p=s.notifications[key]
-                    if value=='off'then p.toast=false else p.toast=true;if canReply then p.reply=value=='reply'end end
-                end},
-                sound={get=function()return s.notifications[key].sound end,set=function(value)s.notifications[key].sound=value end},
-                kit={choices=soundChoices,get=function()return Z.Notifications.KitName(key,s.notifications[key])end,set=function(value)
-                    s.notifications[key].soundKit=value;Z.Notifications.PlayKit(value)
-                end}})
-        end
-        add('section',Z.L('Direktnachrichten','Direct messages'))
-        add('check',Z.L('Bei Direktnachrichten automatisch öffnen (nicht im Kampf)','Open automatically for direct messages (not in combat)'),{key='autoOpen'})
-        add('section',Z.L('Hinweis','Notice'))
-        add('slider',Z.L('Hinweis-Dauer','Notice duration'),{key='toastDuration',min=2,max=15,step=1,format=function(v)return math.floor(v)..' s'end})
-        add('check',Z.L('Im Kampf keine Töne und Hinweise','No sounds or notices in combat'),{key='suppressInCombat'})
-        add('action',Z.L('Hinweis-Vorschau anzeigen','Show notice preview'),{run=function()Z.Notifications.Preview()end})
-        add('action',Z.L('Benachrichtigungston testen','Test notification sound'),{run=function()Z.Notifications.PlayTell()end})
-        add('action',Z.L('Hinweisposition zurücksetzen','Reset notification position'),{run=function()Z.Notifications.ResetPosition()end})
-        add('note',Z.L('Den Hinweis verschiebst du mit gedrückter linker Maustaste; ein einfacher Klick öffnet das Gespräch.','Drag the notification with the left mouse button to move it; a plain click opens the conversation.'))
-    else
-        add('section',Z.L('Dein lokales Archiv','Your local archive'))
-        local conversations,messages,bytes=Z.store:Stats()
-        add('note',string.format(Z.L('%d Gespräche · %d Nachrichten · %s Text. Die Datei auf der Festplatte ist wegen der Zusatzdaten größer.','%d conversations · %d messages · %s of text. The file on disk is larger because of the extra data.'),conversations,messages,sizeLabel(bytes)))
-        if s.retentionCount>0 or s.retentionDays>0 then
-            add('note',Z.L('Ältere Nachrichten werden nach den Grenzen unten gelöscht. Das Archiv wird auf diesem Computer über deine Charaktere geteilt.','Older messages are deleted according to the limits below. The archive is shared across your characters on this computer.'))
-        else
-            add('note',Z.L('Nachrichten bleiben dauerhaft erhalten, bis du sie selbst löschst. Das Archiv wird auf diesem Computer über deine Charaktere geteilt.','Messages remain until you delete them. The archive is shared across your characters on this computer.'))
-        end
-        add('choice',Z.L('Höchstens pro Gespräch','Maximum per conversation'),{choices={{0,Z.L('Unbegrenzt','Unlimited')},{500,'500'},{1000,'1.000'},{5000,'5.000'},{10000,'10.000'},{50000,'50.000'}},get=function()return s.retentionCount end,set=retentionSetter('retentionCount')})
-        add('choice',Z.L('Höchstes Alter','Maximum age'),{choices={{0,Z.L('Unbegrenzt','Unlimited')},{30,Z.L('30 Tage','30 days')},{90,Z.L('90 Tage','90 days')},{180,Z.L('180 Tage','180 days')},{365,Z.L('1 Jahr','1 year')}},get=function()return s.retentionDays end,set=retentionSetter('retentionDays')})
-        do
-            local c=Z.store:Get(Z.store.db.ui.selected)
-            if c then
-                add('check',string.format(Z.L('„%s“ von den Grenzen ausnehmen','Exempt "%s" from the limits'),Z.Format.ConversationLabel(c)),{get=function()return c.keep==true end,set=function(value)Z.store:SetKeep(c.key,value)end})
-                add('action',Z.L('Ausgewähltes Gespräch exportieren …','Export selected conversation …'),{run=function()U.ExportConversation(c)end})
-            end
-        end
-        add('note',Z.L('Gespräch schließen blendet es aus und erhält den Verlauf. Verlauf löschen leert nur das lokale Archiv.','Closing a conversation preserves its history. Clearing history only empties the local archive.'))
-        add('action',Z.L('Verlauf des ausgewählten Gesprächs löschen …','Clear selected conversation history …'),{run=function()
-            local c=Z.store:Get(Z.store.db.ui.selected)
-            if not c then U.Notice(Z.L('Wähle zuerst ein Gespräch.','Select a conversation first.'));return end
-            U.Confirm(Z.L('Lokalen Verlauf von ','Clear local history for ')..c.name..'?',function()Z.store:Clear(c.key)end)
-        end})
-        add('action',Z.L('Alle lokalen Verläufe löschen …','Clear all local history …'),{run=function()
-            U.Confirm(Z.L('Alle lokalen Verläufe löschen?','Clear all local history?'),function()Z.store:ClearAll()end)
-        end})
-    end
-end
-local function value(spec)if spec.get then return spec.get()end;return Z.store.settings[spec.key]end
-local function change(spec,v)
-    if spec.set then spec.set(v)else U.SetSetting(spec.key,v)end
-    if spec.after then spec.after()end
-end
-local function choices(spec)return type(spec.choices)=='function'and spec.choices()or spec.choices or{}end
-local function arrow(button)
-    button.arrow=button:CreateTexture(nil,'ARTWORK');button.arrow:SetTexture('Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up')
-    button.arrow:SetPoint('RIGHT',button,'RIGHT',-7,0);button.arrow:SetSize(14,14)
-end
--- The menu of a choice; item has choices, get and set (or key).
-local function openChoice(button,item)
-    local menu={}
-    for _,choice in ipairs(choices(item))do
-        local id=choice[1]
-        menu[#menu+1]={text=choice[2],run=function()change(item,id);U.LayoutOptions()end}
-    end
-    if#menu==0 then menu[1]={text=Z.L('Keine Auswahl verfügbar','No options available'),run=function()end}end
-    U.ShowMenu(button,menu)
-end
-local function choiceLabel(item)
-    local current=value(item)
-    for _,entry in ipairs(choices(item))do if tostring(entry[1])==tostring(current)then return entry[2]end end
-    return Z.L('Auswählen …','Choose …')
-end
-local function control(index,spec)
-    local T=Z.Theme;local key=spec.kind..':'..index
-    if U.optionRows[key]then return U.optionRows[key]end
-    local row=CreateFrame('Frame',nil,U.settingsContent);row.label=T.Text(row,'',13,false,'text');row.label:SetWordWrap(true)
-    if spec.kind=='section'then T.Font(row.label,17,true,'goldBright')
-    elseif spec.kind=='note'then T.Font(row.label,12,false,'muted')
-    elseif spec.kind=='slider'then
-        local track=T.Frame(row,'field','border');row.track=track
-        local slider=CreateFrame('Slider',nil,track);row.slider=slider
-        slider:SetOrientation('HORIZONTAL');slider:SetThumbTexture('Interface\\Buttons\\UI-SliderBar-Button-Horizontal')
-        slider:SetObeyStepOnDrag(true)
-        row.number=T.Text(row,'',12,false,'text');row.number:SetJustifyH('RIGHT')
-        slider:SetScript('OnValueChanged',function(_,v)
-            if row.updating then return end
-            local item=row.spec;local rounded=math.floor(v/item.step+.5)*item.step
-            change(item,rounded)
-        end)
-    elseif spec.kind=='check'then
-        row.check=CreateFrame('CheckButton',nil,row,'BackdropTemplate');T.Panel(row.check,'field','border')
-        row.check:SetCheckedTexture('Interface\\Buttons\\UI-CheckBox-Check')
-        row.check:SetScript('OnClick',function(self)change(row.spec,self:GetChecked()==true)end)
-        row:EnableMouse(true);row:SetScript('OnMouseUp',function()local v=not value(row.spec);row.check:SetChecked(v);change(row.spec,v)end)
-    elseif spec.kind=='choice'then
-        row.button=T.Button(row,'',function(self)openChoice(self,row.spec)end);arrow(row.button)
-    elseif spec.kind=='matrixhead'then
-        row.h1=T.Text(row,Z.L('Hinweis','Notice'),11,true,'muted');row.h2=T.Text(row,Z.L('Ton','Sound'),11,true,'muted');row.h3=T.Text(row,Z.L('Klang','Tone'),11,true,'muted')
-    elseif spec.kind=='matrix'then
-        row.notice=T.Button(row,'',function(self)openChoice(self,row.spec.notice)end);arrow(row.notice)
-        row.check=CreateFrame('CheckButton',nil,row,'BackdropTemplate');T.Panel(row.check,'field','border')
-        row.check:SetCheckedTexture('Interface\\Buttons\\UI-CheckBox-Check')
-        row.check:SetScript('OnClick',function(self)change(row.spec.sound,self:GetChecked()==true)end)
-        row.checkLabel=T.Text(row,Z.L('Ton','Sound'),12,false,'text')
-        row.kit=T.Button(row,'',function(self)openChoice(self,row.spec.kit)end);arrow(row.kit)
-    elseif spec.kind=='action'then row.button=T.Button(row,'',function()row.spec.run()end)end
-    U.optionRows[key]=row;return row
+local function selectedConversation()return Z.store:Get(Z.store.db.ui.selected)end
+-- The page being shown is read again after a change (rows that depend on a value, texts with counts).
+function U.RefreshSettings()
+    local view=U.settingsView;local key=view and view:CurrentPage();local page=key and view:Page(key)
+    if page and page.refresh then page.refresh()end
 end
 function U.RebuildOptions()
-    if not U.settingsScroll then return end
-    buildSpecs();U.LayoutOptions()
+    local view=U.settingsView;if not view then return end
+    local key=view:CurrentPage();if key then view:Rebuild(key)end
 end
-function U.LayoutOptions()
-    if not U.settingsScroll then return end
-    local T=Z.Theme;local panel=U.settingsPanel;local w=panel:GetWidth();local h=panel:GetHeight()
-    T.Place(U.optionsTitle,18,12,math.max(70,w-180),34,panel)
-    T.Place(U.settingsScroll,16,66,w-38,h-109,panel);U.settingsContent:SetWidth(w-48)
-    T.Place(U.optionsFooter,18,h-29,w-36,20,panel)
-    U.optionsFooter:SetText(U.settingsPage=='blizzard'and Z.L('Änderungen erst nach Vorschau bestätigen.','Confirm changes after preview.')or Z.L('Änderungen werden sofort gespeichert.','Changes are saved immediately.'))
-    T.Place(U.optionsScrollbar,w-15,67,8,h-111,panel)
-    local navWidth=U.settingsNav:GetWidth();local compact=U.metrics.iconOnly
-    local navStep=math.min(58,(U.settingsNav:GetHeight()-24)/#pages);local tabHeight=navStep-6
-    for i,entry in ipairs(pages)do
-        local b=U.optionTabs[i];T.Place(b,6,12+(i-1)*navStep,navWidth-12,tabHeight,U.settingsNav)
-        local iconSize=math.min(34,tabHeight-8)
-        T.Place(b.icon,7,navStep==58 and 8 or(tabHeight-iconSize)/2,iconSize,iconSize,b);T.Place(b.caption,50,navStep==58 and 16 or(tabHeight-26)/2,math.max(1,navWidth-70),26,b)
-        b.caption:SetShown(not compact);b.zenialBackgroundKind=entry[1]==U.settingsPage and'selected'or'sidebar'
-        local c=T.colors[b.zenialBackgroundKind];b:SetBackdropColor(c[1],c[2],c[3],U.currentAlpha or.94)
+-- A limit that would delete something asks first; nothing is removed if the answer is no.
+local function retentionSetter(view,key,label)
+    return function(v)
+        local s=Z.store.settings
+        local count=key=='retentionCount'and v or s.retentionCount
+        local days=key=='retentionDays'and v or s.retentionDays
+        local n=Z.store:CountPrunable(count,days)
+        local function apply()s[key]=v;Z.store:PruneAll();U.RefreshSettings()end
+        if n>0 then
+            view:Confirm({title=label,accept=t('Löschen','Delete'),variant='danger',onAccept=apply,
+                text=string.format(Z.L('%d Nachrichten werden dauerhaft gelöscht. Fortfahren?','%d messages will be deleted for good. Continue?'),n)})
+        else apply()end
     end
-    local y=3;local used={};local pageWidth=w-54;local width=pageWidth;local stacked=width<540
-    local showLivePreview=U.settingsPage=='appearance'and pageWidth>=650
-    if showLivePreview and not U.optionsLivePreview then
-        local f=T.Frame(U.settingsContent,'field','border');U.optionsLivePreview=f
-        f.title=T.Text(f,Z.L('Vorschau','Preview'),11,true,'goldBright');T.Place(f.title,10,6,220,17,f)
-        f.rows={}
-        for i=1,3 do
-            local row={icon=T.Icon(f,{}),name=T.Text(f,'',11,true),body=T.Text(f,'',10,false,'muted')}
-            row.name:SetWordWrap(false);row.body:SetWordWrap(false);f.rows[i]=row
-            T.Place(row.icon,9,26+(i-1)*27,21,21,f);T.Place(row.name,38,23+(i-1)*27,200,16,f);T.Place(row.body,38,37+(i-1)*27,200,15,f)
-        end
+end
+-- Every setting is read from and written to the live settings table; U.SetSetting lays the window out again.
+local function context()
+    return{tr=tr,default=function(key)return Z.Store.Defaults[key]end,
+        read=function(key)return Z.store.settings[key]end,write=function(key,value)U.SetSetting(key,value)end,
+        changed=function()U.RefreshSettings()end}
+end
+local function newForm(page,view)
+    local form=Form.New(context(),page.content,view.formWidth)
+    page.form=form
+    page.refresh=function()
+        form:Refresh();page.content:SetHeight(math.max(1,form:Height()))
+        -- Rows built or changed now need the opacity of the window as well (the preview).
+        Z.ChatTheme.Opacity(U.currentAlpha or Z.store.settings.alphaActive)
     end
-    if U.optionsLivePreview then
-        U.optionsLivePreview:SetShown(showLivePreview)
-        if showLivePreview then
-            local f=U.optionsLivePreview;T.Place(f,pageWidth-255,39,255,112,U.settingsContent)
-            f.previewOpacity=Z.store.settings.alphaInactive
-            local c=Z.store:Get(Z.store.db.ui.selected);local messages=c and c.messages or{}
+    return form
+end
+local function toggle(form,key,de,en,extra)
+    local spec={key=key,label=t(de,en)};for k,v in pairs(extra or{})do spec[k]=v end
+    return form:Toggle(spec)
+end
+local function slider(form,key,de,en,min,max,step,format,extra)
+    local spec={key=key,label=t(de,en),min=min,max=max,step=step,format=format,live=true};for k,v in pairs(extra or{})do spec[k]=v end
+    return form:Slider(spec)
+end
+local function choice(form,key,de,en,options,extra)
+    local spec={key=key,label=t(de,en),options=options};for k,v in pairs(extra or{})do spec[k]=v end
+    return form:Select(spec)
+end
+local function note(form,de,en,extra)
+    local spec={text=t(de,en)};for k,v in pairs(extra or{})do spec[k]=v end
+    return form:Note(spec)
+end
+-- The sample of the appearance page: three lines in the look of the conversation, at the inactive opacity.
+local function previewRow(form)
+    local sample
+    form:Custom({anchor='preview',height=118,
+        build=function(frame,width)
+            local T=Z.ChatTheme
+            local f=T.Frame(frame,'field','border');sample=f;U.optionsLivePreview=f;f.previewOpacity=Z.store.settings.alphaInactive
+            f.title=T.Text(f,Z.L('Vorschau','Preview'),11,true,'goldBright');T.Place(f.title,10,6,220,17,f)
+            f.rows={}
+            for i=1,3 do
+                local row={icon=T.Icon(f,{}),name=T.Text(f,'',11,true),body=T.Text(f,'',10,false,'muted')}
+                row.name:SetWordWrap(false);row.body:SetWordWrap(false);f.rows[i]=row
+            end
+            T.Place(f,0,4,width,110,frame)
+        end,
+        refresh=function(frame,width)
+            local T=Z.ChatTheme;local f=sample
+            T.Place(f,0,4,width,110,frame);f.previewOpacity=Z.store.settings.alphaInactive
+            local c=selectedConversation();local messages=c and c.messages or{}
             for i,row in ipairs(f.rows)do
                 local message=messages[math.max(1,#messages-3+i)]
+                T.Place(row.icon,9,26+(i-1)*27,21,21,f);T.Place(row.name,38,23+(i-1)*27,math.max(40,width-48),16,f);T.Place(row.body,38,37+(i-1)*27,math.max(40,width-48),15,f)
                 row.name:SetText(message and(message.outgoing and Z.L('Du','You')or message.sender)or Z.L('Kontakt','Contact'))
                 row.body:SetText(message and Z.Plain(message.text)or Z.L('So sieht dein Gespräch aus.','This is your conversation preview.'))
                 T.NameColor(row.name,message and message.senderClass);T.SetIcon(row.icon,{kind='WHISPER',classFile=message and message.senderClass})
             end
-        end
+        end})
+end
+local builders={}
+function builders.appearance(page,view)
+    local form=newForm(page,view)
+    form:Card(t('Darstellung','Appearance'))
+    slider(form,'alphaActive','Hintergrund aktiv','Active background',0,1,.01,percent)
+    slider(form,'alphaInactive','Hintergrund inaktiv','Inactive background',0,1,.01,percent)
+    note(form,'Schrift und Symbole bleiben gut lesbar.','Text and icons stay fully legible.')
+    previewRow(form)
+    form:Card(t('Größe & Lesbarkeit','Size & readability'))
+    slider(form,'scale','UI-Skalierung','UI scale',.75,1.5,.05,percent)
+    slider(form,'fontSize','Schriftgröße','Font size',12,20,1,whole)
+    choice(form,'sidebar','Seitenleiste','Sidebar',{{'auto',Z.L('Automatisch','Automatic')},{'names',Z.L('Namen','Names')},{'icons',Z.L('Symbole','Icons')}})
+    note(form,'Bei wenig Platz entfallen zuerst Vorschauen, danach Namen.','At smaller widths, previews hide first, then names.')
+    toggle(form,'previews','Nachrichtenvorschau anzeigen','Show last-message previews')
+    toggle(form,'sidebarCompact','Kompakte Seitenleiste','Compact sidebar')
+    choice(form,'channelLabels','Kanal- und Gruppennamen','Channel and group names',{{'full',Z.L('Vollständig','Full')},{'short',Z.L('Kurz (Gilde: G, Schlachtzug: SZ)','Short (Guild: G, Raid: R)')},{'number',Z.L('Kanalnummer','Channel number')}})
+    note(form,'Eigene Anzeigenamen vergibst du im Gesprächsmenü •••. Die Kanalnummer gilt nur für Kanäle, Gruppen zeigen dort ihr Kürzel.','Set your own display names in the ••• conversation menu. The number applies to channels only; groups show their short name.')
+    form:Card(t('Fenster','Window'))
+    toggle(form,'locked','Position und Größe sperren','Lock position and size')
+    form:Buttons({anchor='resetGeometry',{text=t('Position und Größe zurücksetzen','Reset position and size'),onClick=function()U.ResetGeometry();U.RefreshSettings()end}})
+    toggle(form,'minimapHidden','Minimap-Icon ausblenden','Hide minimap icon',{onChange=function()U.ApplyMinimapVisibility()end})
+    form:Card(t('Ausblenden','Fading'))
+    toggle(form,'fadeEnabled','Fenster bei Inaktivität ausblenden','Fade the window when idle')
+    slider(form,'fadeAfter','Ausblenden nach','Fade after',5,300,5,seconds)
+    slider(form,'fadeAlpha','Sichtbarkeit danach','Visibility afterwards',0,1,.05,percent)
+    note(form,'Überfahren, Tippen oder eine neue Nachricht blenden das Fenster wieder ein.','Hovering, typing or a new message bring the window back.')
+end
+function builders.messages(page,view)
+    local form=newForm(page,view)
+    form:Card(t('Namen','Names'))
+    choice(form,'nameFormat','Namensformat','Name format',{{'full',Z.L('Vorname Nachname','First Last')},{'first',Z.L('Nur Vorname','First name only')},{'last',Z.L('Nur Nachname','Last name only')},{'initialLast',Z.L('V. Nachname','F. Last')},{'firstInitial',Z.L('Vorname N.','First L.')},{'initials',Z.L('Initialen','Initials')}})
+    note(form,'Gilt nur für Charaktere mit genau Vor- und Nachname. Andere Namen und Battle.net-Konten bleiben vollständig. Beim Überfahren steht immer der ganze Name da.','Applies only to characters with exactly a first and a last name. Other names and Battle.net accounts stay complete. Hovering always shows the whole name.')
+    toggle(form,'classColors','Klassenfarben für Namen','Class colors for names')
+    form:Card(t('Symbole','Icons'))
+    choice(form,'senderIcon','Symbol neben Nachrichten','Icon next to messages',{{'class',Z.L('Klasse','Class')},{'race',Z.L('Rasse','Race')},{'none',Z.L('Keines','None')}})
+    choice(form,'raceIconQuality','Rassensymbole','Race icons',{{'hd',Z.L('Hohe Auflösung','High resolution')},{'sd',Z.L('Standard','Standard')}})
+    slider(form,'iconSize','Symbolgröße','Icon size',16,48,2,whole)
+    note(form,'Die Rasse ist erst nach einer neuen Nachricht der Person bekannt. Bis dahin steht dort die Klasse, ist auch die unbekannt, das Chat-Symbol.','A race is known only after a new message from that person. Until then the class is shown and, if that is unknown too, the chat icon.')
+    form:Card(t('Zeit','Time'))
+    choice(form,'timeFormat','Zeitstempel','Timestamps',{{'hm','14:05'},{'hms','14:05:30'},{'date','06.11.2026 14:05'},{'relative',Z.L('Heute 14:05','Today 14:05')},{'off',Z.L('Aus','Off')}})
+    choice(form,'timeZone','Uhrzeit','Clock',{{'local',Z.L('Lokale Zeit','Local time')},{'server',Z.L('Serverzeit','Server time')}})
+    note(form,'Die Serverzeit gilt mit dem heutigen Abstand auch für ältere Nachrichten; über eine Zeitumstellung hinweg kann sie um eine Stunde abweichen. Überfahren zeigt Datum und Sekunden, Shift-Klick zitiert.','Server time applies today\'s offset to older messages too, so across a clock change it can be off by an hour. Hovering shows date and seconds, shift-click quotes.')
+    toggle(form,'dateSeparators','Datumstrenner anzeigen','Show date separators')
+    form:Card(t('Layout','Layout'))
+    choice(form,'layoutStyle','Nachrichtenlayout','Message layout',{{'bubbles',Z.L('Sprechblasen','Bubbles')},{'compact',Z.L('Kompakt','Compact')},{'classic',Z.L('Klassische Liste','Classic list')}})
+    toggle(form,'groupMessages','Aufeinanderfolgende Nachrichten gruppieren','Group consecutive messages')
+    choice(form,'fontFace','Schriftart','Font',{{'noto','Noto Sans'},{'friz','Friz Quadrata'},{'arial','Arial Narrow'},{'morpheus','Morpheus'},{'skurri','Skurri'}})
+    choice(form,'fontOutline','Textkontur','Text outline',{{'none',Z.L('Keine','None')},{'OUTLINE',Z.L('Dünn','Thin')},{'THICKOUTLINE',Z.L('Dick','Thick')}})
+    slider(form,'lineSpacing','Zeilenabstand','Line spacing',0,8,1,whole)
+    form:Card(t('Links & Zitate','Links & quotes'))
+    toggle(form,'urlLinks','Webadressen erkennen','Detect web addresses')
+    note(form,'Ein Klick zeigt die Adresse zum Kopieren. Addons können keinen Browser öffnen.','A click shows the address for copying. Addons cannot open a browser.')
+    choice(form,'quoteFormat','Zitat-Format','Quote format',{{'text',Z.L('Nur Text','Text only')},{'sender',Z.L('Mit Absender','With sender')},{'time',Z.L('Mit Absender und Zeit','With sender and time')}})
+end
+-- One checkbox per joined channel; the list follows the channels the player has joined right now.
+local CHANNEL_ROW=34
+local function channelList(form)
+    local count=0
+    form:Custom({anchor='channels',
+        visible=function()return Z.store.settings.publicChannels and#Z.adapter:JoinedChannels()>0 end,
+        height=function()return math.max(1,count)*CHANNEL_ROW end,
+        build=function(frame)frame.checks={}end,
+        refresh=function(frame,width)
+            local list=Z.adapter:JoinedChannels();count=#list
+            for i,channel in ipairs(list)do
+                local check=frame.checks[i]
+                if not check then
+                    check=CreateFrame('CheckButton',nil,frame,'UICheckButtonTemplate');check:SetSize(24,24);Z.Theme.StyleCheckbox(check)
+                    check.label=Z.ChatTheme.Text(check,'',12,false,'text');check.label:SetPoint('LEFT',check,'RIGHT',6,0);check.label:SetWordWrap(false)
+                    check:SetScript('OnClick',function(self)Z.adapter:SetChannel(self.channel,self:GetChecked()==true)end)
+                    frame.checks[i]=check
+                end
+                check.channel=channel.name;check:ClearAllPoints();check:SetPoint('TOPLEFT',frame,'TOPLEFT',0,-((i-1)*CHANNEL_ROW+5))
+                check.label:SetWidth(math.max(40,width-40));check.label:SetText(channel.name)
+                check:SetChecked(Z.store.settings.enabledChannels[channel.name:lower()]==true);check:Show()
+            end
+            for i=count+1,#frame.checks do frame.checks[i]:Hide()end
+        end})
+end
+local function calibrationButtons(form)
+    local function notice(de,en)U.Notice(Z.L(de,en))end
+    local C=Z.Calibration
+    form:Buttons({anchor='calibrationActions',
+        {text=t('Probe senden','Send probe'),onClick=function()
+            local ok,code=C.SendNextProbe()
+            if ok then notice('Probe gesendet.','Probe sent.')
+            elseif code=='done'then C.ResetSender();notice('Alle Proben gesendet. Der nächste Klick beginnt von vorn.','All probes sent. The next click starts over.')
+            else notice('Probe konnte nicht gesendet werden.','The probe could not be sent.')end
+            U.RefreshSettings()
+        end},
+        {text=t('Zuhören (Ziel)','Listen (target)'),onClick=function()
+            if C.ListenTarget(false)then notice('Höre dem Ziel zu (10 Minuten).','Listening to the target (10 minutes).')
+            else notice('Wähle zuerst einen Spieler als Ziel.','Target a player first.')end
+        end},
+        {text=t('Ergebnis exportieren','Export result'),onClick=function()
+            local code=C.ExportCode()
+            if code then U.ShowCopy(code,Z.L('Kalibrierung für den Sender · Strg+C','Calibration for the sender · Ctrl+C'))
+            else notice('Noch kein Ergebnis.','No result yet.')end
+        end},
+        {text=t('Code importieren','Import code'),onClick=function()
+            U.Prompt(Z.L('Kalibrierungscode einfügen · Enter','Paste calibration code · Enter'),'',function(value)
+                local ok=C.Import(value)
+                notice(ok and'Tabelle importiert.'or'Der Code ist ungültig.',ok and'Table imported.'or'The code is invalid.')
+                U.RefreshSettings()
+            end)
+        end},
+        {text=t('Wortprobe senden','Send word probe'),onClick=function()
+            local ok,code=C.SendNextWordProbe()
+            if ok then notice('Wortprobe gesendet.','Word probe sent.')
+            elseif code=='done'then C.ResetSender();notice('Alle Wortproben gesendet. Der nächste Klick beginnt von vorn.','All word probes sent. The next click starts over.')
+            else notice('Wortprobe konnte nicht gesendet werden.','The word probe could not be sent.')end
+        end},
+        {text=t('Wortproben zuhören (Ziel)','Listen for word probes (target)'),onClick=function()
+            if C.ListenTarget(true)then notice('Höre dem Ziel zu (10 Minuten).','Listening to the target (10 minutes).')
+            else notice('Wähle zuerst einen Spieler als Ziel.','Target a player first.')end
+        end},
+        {text=t('Wortproben-Ergebnis exportieren','Export word probe result'),onClick=function()
+            local text=C.ExportWords()
+            if text then U.ShowCopy(text,Z.L('Wortpaare für GarbleData.lua · Strg+C','Word pairs for GarbleData.lua · Ctrl+C'),true)
+            else notice('Noch kein Ergebnis.','No result yet.')end
+        end}})
+end
+function builders.behavior(page,view)
+    local form=newForm(page,view)
+    form:Card(t('Eingabe & Fenster','Input & window'))
+    toggle(form,'focusOnOpen','Eingabe beim Öffnen fokussieren','Focus composer when opening')
+    note(form,'Enter sendet · Shift+Enter fügt einen Zeilenumbruch ein. Escape löst zuerst den Eingabefokus.','Enter sends · Shift+Enter inserts a new line. Escape first releases input focus.')
+    toggle(form,'inputHistory','Gesendete Nachrichten mit Pfeil hoch/runter abrufen','Recall sent messages with arrow up/down')
+    choice(form,'inputHistoryScope','Verlauf der Eingabe','Input history',{{'conversation',Z.L('Je Gespräch','Per conversation')},{'global',Z.L('Für alle Gespräche','Across conversations')}})
+    toggle(form,'rememberScroll','Leseposition je Gespräch merken','Remember reading position per conversation')
+    toggle(form,'searchHistoryEnabled','Suchverlauf speichern','Keep search history')
+    note(form,'Tastenkürzel: WoW → Tastenbelegung → Zenial Chat. /zchat öffnet das Fenster.','Shortcut: WoW → Key Bindings → Zenial Chat. /zchat opens the window.')
+    form:Card(t('Öffentliche & eigene Kanäle','Public & custom channels'))
+    toggle(form,'publicChannels','Öffentliche Kanäle im Messenger anbieten','Offer public channels in Messenger')
+    channelList(form)
+    note(form,'Noch keine beigetretenen Kanäle verfügbar.','No joined channels available yet.',{anchor='noChannels',
+        visible=function()return Z.store.settings.publicChannels and#Z.adapter:JoinedChannels()==0 end})
+    -- Absent while a running client has not yet picked up the new TOC files (update without restart).
+    if Z.Calibration then
+        form:Card(t('Kalibrierung','Calibration'))
+        note(form,'Für Spieler der anderen Fraktion: Ein Mitspieler dieser Fraktion mit Zenial Chat steht in Sagen-Reichweite. Jeder Klick sendet genau eine Zeile.','For the other faction: a player of that faction with Zenial Chat stands within say range. Each click sends exactly one line.')
+        form:Note({anchor='calibrationStatus',text=function()return(Z.Calibration.StatusText(Z.Calibration.OwnLanguageId()))end})
+        calibrationButtons(form)
     end
-    for i,spec in ipairs(U.optionSpecs or{})do
-        width=showLivePreview and i>=2 and i<=4 and pageWidth-280 or pageWidth
-        local row=control(i,spec);row.spec=spec;row:Show();used[row]=true;row.label:SetText(spec.label)
-        local height
-        if spec.kind=='section'then height=stacked and 43 or 36;T.Place(row.label,0,9,width,25,row)
-        elseif spec.kind=='note'then
-            row.label:SetWidth(width);height=math.max(stacked and 39 or 28,row.label:GetStringHeight()+12);T.Place(row.label,0,3,width,height-8,row)
-        elseif spec.kind=='check'then
-            height=stacked and 42 or 36;T.Place(row.check,1,7,22,22,row);T.Place(row.label,34,7,width-38,29,row)
-            row.check:SetChecked(value(spec)==true)
-        elseif spec.kind=='slider'then
-            height=stacked and 70 or 42
-            local x=stacked and 0 or math.min(180,width*.42);local top=stacked and 33 or 10
-            T.Place(row.label,0,10,stacked and width or x-10,24,row)
-            T.Place(row.track,x,top+8,width-x-59,7,row);T.Place(row.slider,2,-10,width-x-63,27,row.track)
-            T.Place(row.number,width-55,top+3,55,22,row)
-            row.updating=true;row.slider:SetMinMaxValues(spec.min,spec.max);row.slider:SetValueStep(spec.step);row.slider:SetValue(value(spec));row.updating=false
-            row.number:SetText(spec.format(value(spec)))
-        elseif spec.kind=='choice'then
-            height=stacked and 74 or 42;local x=stacked and 0 or math.min(180,width*.42)
-            T.Place(row.label,0,10,stacked and width or x-10,24,row)
-            row.button.label:SetText(choiceLabel(spec));T.Place(row.button,x,stacked and 34 or 4,width-x,32,row)
-        elseif spec.kind=='matrixhead'then
-            -- Column titles; the narrow layout has the controls under each label and needs none.
-            height=stacked and 2 or 24;row.label:Hide();local x0=math.min(180,width*.36)
-            local noticeW=math.floor((width-x0)*.5);local checkX=x0+noticeW+10;local kitX=checkX+44
-            T.Place(row.h1,x0,5,noticeW,16,row);T.Place(row.h2,checkX-4,5,44,16,row);T.Place(row.h3,kitX,5,width-kitX,16,row)
-            for _,h in ipairs({row.h1,row.h2,row.h3})do h:SetShown(not stacked)end
-        elseif spec.kind=='matrix'then
-            local x0=stacked and 0 or math.min(180,width*.36);local top=stacked and 34 or 4
-            local noticeW=math.floor((width-x0)*(stacked and .46 or .5));local checkX=x0+noticeW+(stacked and 8 or 10)
-            local kitX=checkX+(stacked and 76 or 44)
-            height=stacked and 74 or 42;row.label:Show()
-            T.Place(row.label,0,stacked and 8 or 10,stacked and width or x0-10,24,row)
-            row.notice.label:SetText(choiceLabel(spec.notice));T.Place(row.notice,x0,top,noticeW,32,row)
-            T.Place(row.check,checkX,top+5,22,22,row);row.check:SetChecked(value(spec.sound)==true)
-            row.checkLabel:SetShown(stacked);if stacked then T.Place(row.checkLabel,checkX+28,top+7,44,20,row)end
-            row.kit.label:SetText(choiceLabel(spec.kit));T.Place(row.kit,kitX,top,math.max(40,width-kitX),32,row)
-        else
-            height=stacked and 49 or 42;row.label:Hide();row.button.label:SetText(spec.label);T.Place(row.button,0,5,width,33,row)
-        end
-        T.Place(row,0,y,width,height,U.settingsContent);y=y+height
+    form:Card(t('Übersetzungshinweis','Translation hint'))
+    toggle(form,'xfChatHint','Übersetzungshinweis im Chat anzeigen','Show translation hint in chat')
+    note(form,'Der Hinweis erscheint erst, wenn die Client-Unterstützung bestätigt ist.','The hint appears only once client support has been confirmed.')
+end
+-- One notification group: how it announces itself, whether it plays a sound, and which one. Wide: one line;
+-- narrow: the name above the three controls.
+local MATRIX_WIDE=520
+local function matrixHead(form)
+    local wide=true
+    form:Custom({anchor='matrixHead',height=function()return wide and 24 or 1 end,
+        visible=function()return true end,
+        build=function(frame)
+            local T=Z.ChatTheme
+            frame.h1=T.Text(frame,Z.L('Hinweis','Notice'),11,true,'muted');frame.h2=T.Text(frame,Z.L('Ton','Sound'),11,true,'muted');frame.h3=T.Text(frame,Z.L('Klang','Tone'),11,true,'muted')
+        end,
+        refresh=function(frame,width)
+            wide=width>=MATRIX_WIDE;local T=Z.ChatTheme
+            local x0=math.min(180,width*.34);local noticeW=math.floor((width-x0)*.42);local soundX=x0+noticeW+10;local kitX=soundX+66
+            T.Place(frame.h1,x0,5,noticeW,16,frame);T.Place(frame.h2,soundX,5,60,16,frame);T.Place(frame.h3,kitX,5,math.max(40,width-kitX),16,frame)
+            for _,h in ipairs({frame.h1,frame.h2,frame.h3})do h:SetShown(wide)end
+        end})
+    return function()return wide end
+end
+local function matrixRow(form,group,isWide)
+    local key=group[1];local label=Z.L(group[2],group[3]);local canReply=key=='whispers'or key=='bnet'
+    local s=Z.store.settings;local wide=true
+    local function pref()return s.notifications[key]end
+    local notices={{'off',Z.L('Kein Hinweis','No notice')},{'small',Z.L('Kleiner Hinweis','Small notice')}}
+    if canReply then notices[3]={'reply',Z.L('Hinweis mit Antwortfeld','Notice with reply field')}end
+    form:Custom({anchor='matrix:'..key,height=function()return wide and 40 or 66 end,
+        build=function(frame)
+            local T=Z.ChatTheme
+            frame.label=T.Text(frame,label,12,false,'text');frame.label:SetWordWrap(true)
+            -- off: no notice; small: notice only; reply: notice with a reply line (direct messages only, no key elsewhere)
+            frame.notice=Form.Dropdown(frame,{width=150,options=notices,tr=tr,
+                get=function()
+                    local p=pref();if p.toast~=true then return'off'end
+                    return canReply and p.reply==true and'reply'or'small'
+                end,
+                set=function(value)
+                    local p=pref()
+                    if value=='off'then p.toast=false else p.toast=true;if canReply then p.reply=value=='reply'end end
+                end})
+            frame.check=CreateFrame('CheckButton',nil,frame,'UICheckButtonTemplate');frame.check:SetSize(24,24);Z.Theme.StyleCheckbox(frame.check)
+            frame.check:SetScript('OnClick',function(self)pref().sound=self:GetChecked()==true end)
+            frame.checkLabel=T.Text(frame,Z.L('Ton','Sound'),12,false,'text')
+            frame.kit=Form.Dropdown(frame,{width=150,options=soundChoices,tr=tr,translate=false,placeholder=Z.L('Auswählen …','Choose …'),
+                get=function()return Z.Notifications.KitName(key,pref())end,
+                set=function(value)pref().soundKit=value;Z.Notifications.PlayKit(value)end})
+        end,
+        refresh=function(frame,width)
+            local T=Z.ChatTheme;wide=isWide()
+            frame.label:SetText(label)
+            frame.check:SetChecked(pref().sound==true);frame.notice:Refresh();frame.kit:Refresh()
+            if wide then
+                local x0=math.min(180,width*.34);local noticeW=math.floor((width-x0)*.42);local soundX=x0+noticeW+10;local kitX=soundX+66
+                T.Place(frame.label,0,10,x0-10,24,frame)
+                frame.notice:ClearAllPoints();frame.notice:SetPoint('TOPLEFT',frame,'TOPLEFT',x0,-6);frame.notice:SetSize(noticeW,26)
+                frame.check:ClearAllPoints();frame.check:SetPoint('TOPLEFT',frame,'TOPLEFT',soundX,-7);frame.checkLabel:Hide()
+                frame.kit:ClearAllPoints();frame.kit:SetPoint('TOPLEFT',frame,'TOPLEFT',kitX,-6);frame.kit:SetSize(math.max(60,width-kitX),26)
+            else
+                local noticeW=math.floor((width-72)*.5);local kitW=width-72-noticeW
+                T.Place(frame.label,0,4,width,18,frame)
+                frame.notice:ClearAllPoints();frame.notice:SetPoint('TOPLEFT',frame,'TOPLEFT',0,-30);frame.notice:SetSize(noticeW,26)
+                frame.check:ClearAllPoints();frame.check:SetPoint('TOPLEFT',frame,'TOPLEFT',noticeW+8,-31);T.Place(frame.checkLabel,noticeW+36,36,36,18,frame);frame.checkLabel:Show()
+                frame.kit:ClearAllPoints();frame.kit:SetPoint('TOPLEFT',frame,'TOPLEFT',noticeW+72,-30);frame.kit:SetSize(math.max(60,kitW),26)
+            end
+        end})
+end
+function builders.notifications(page,view)
+    local form=newForm(page,view)
+    form:Card(t('Neue Nachrichten','New messages'))
+    note(form,'Stummgeschaltete Gespräche behalten ihren Ungelesen-Zähler, spielen aber keinen Ton und zeigen keinen Hinweis.','Muted conversations keep unread counts, but do not play a sound or show a notification.')
+    note(form,'Der Client spielt bei Flüstern und Schlachtzugswarnungen selbst einen Ton. Ein Ton hier kommt zusätzlich hinzu; pro Sekunde spielt Zenial Chat höchstens einen.','The client plays its own sound for whispers and raid warnings. A sound here comes on top; Zenial Chat plays at most one per second.')
+    local isWide=matrixHead(form)
+    for _,group in ipairs({{'whispers','Flüstern','Whispers'},{'bnet','Battle.net','Battle.net'},{'guild','Gilde & Offizier','Guild & officer'},{'groups','Gruppen','Groups'},{'raidWarning','Schlachtzugswarnungen','Raid warnings'},{'channels','Öffentliche Kanäle','Public channels'},{'opposite','Gegnerische Fraktion','Opposite faction'}})do
+        matrixRow(form,group,isWide)
     end
-    for _,row in pairs(U.optionRows)do if not used[row]then row:Hide()end end
-    U.settingsContent:SetHeight(math.max(y,U.settingsScroll:GetHeight()))
-    U.optionsMaxScroll=math.max(0,y-U.settingsScroll:GetHeight());U.optionsScroll=math.min(U.optionsScroll or 0,U.optionsMaxScroll)
-    U.settingsScroll:SetVerticalScroll(U.optionsScroll)
-    U.optionsUpdating=true;U.optionsScrollbar:SetMinMaxValues(0,math.max(1,U.optionsMaxScroll));U.optionsScrollbar:SetValue(U.optionsScroll);U.optionsUpdating=false
-    U.optionsScrollbar:SetShown(U.optionsMaxScroll>0)
-    -- New controls and the inactive sample need the current texture opacity
-    -- even when hover/focus activity itself has not changed.
-    T.Opacity(U.currentAlpha or Z.store.settings.alphaActive)
+    form:Card(t('Direktnachrichten','Direct messages'))
+    toggle(form,'autoOpen','Bei Direktnachrichten automatisch öffnen (nicht im Kampf)','Open automatically for direct messages (not in combat)')
+    form:Card(t('Hinweis','Notice'))
+    slider(form,'toastDuration','Hinweis-Dauer','Notice duration',2,15,1,seconds)
+    toggle(form,'suppressInCombat','Im Kampf keine Töne und Hinweise','No sounds or notices in combat')
+    form:Buttons({anchor='noticeActions',
+        {text=t('Hinweis-Vorschau anzeigen','Show notice preview'),onClick=function()Z.Notifications.Preview()end},
+        {text=t('Benachrichtigungston testen','Test notification sound'),onClick=function()Z.Notifications.PlayTell()end},
+        {text=t('Hinweisposition zurücksetzen','Reset notification position'),onClick=function()Z.Notifications.ResetPosition()end}})
+    note(form,'Den Hinweis verschiebst du mit gedrückter linker Maustaste; ein einfacher Klick öffnet das Gespräch.','Drag the notification with the left mouse button to move it; a plain click opens the conversation.')
+end
+function builders.history(page,view)
+    local form=newForm(page,view);local s=Z.store.settings
+    local function hasConversation()return selectedConversation()~=nil end
+    form:Card(t('Dein lokales Archiv','Your local archive'))
+    form:Note({anchor='archiveStats',text=function()
+        local conversations,messages,bytes=Z.store:Stats()
+        return string.format(Z.L('%d Gespräche · %d Nachrichten · %s Text. Die Datei auf der Festplatte ist wegen der Zusatzdaten größer.','%d conversations · %d messages · %s of text. The file on disk is larger because of the extra data.'),conversations,messages,sizeLabel(bytes))
+    end})
+    form:Note({anchor='archiveKept',text=function()
+        if s.retentionCount>0 or s.retentionDays>0 then
+            return Z.L('Ältere Nachrichten werden nach den Grenzen unten gelöscht. Das Archiv wird auf diesem Computer über deine Charaktere geteilt.','Older messages are deleted according to the limits below. The archive is shared across your characters on this computer.')
+        end
+        return Z.L('Nachrichten bleiben dauerhaft erhalten, bis du sie selbst löschst. Das Archiv wird auf diesem Computer über deine Charaktere geteilt.','Messages remain until you delete them. The archive is shared across your characters on this computer.')
+    end})
+    form:Select({key='retentionCount',label=t('Höchstens pro Gespräch','Maximum per conversation'),
+        options={{0,Z.L('Unbegrenzt','Unlimited')},{500,'500'},{1000,'1.000'},{5000,'5.000'},{10000,'10.000'},{50000,'50.000'}},
+        get=function()return s.retentionCount end,set=retentionSetter(view,'retentionCount',Z.L('Höchstens pro Gespräch','Maximum per conversation'))})
+    form:Select({key='retentionDays',label=t('Höchstes Alter','Maximum age'),
+        options={{0,Z.L('Unbegrenzt','Unlimited')},{30,Z.L('30 Tage','30 days')},{90,Z.L('90 Tage','90 days')},{180,Z.L('180 Tage','180 days')},{365,Z.L('1 Jahr','1 year')}},
+        get=function()return s.retentionDays end,set=retentionSetter(view,'retentionDays',Z.L('Höchstes Alter','Maximum age'))})
+    form:Toggle({anchor='keepSelected',visible=hasConversation,
+        label=function()
+            local c=selectedConversation()
+            return string.format(Z.L('„%s“ von den Grenzen ausnehmen','Exempt "%s" from the limits'),c and Z.Format.ConversationLabel(c)or'')
+        end,
+        get=function()local c=selectedConversation();return c~=nil and c.keep==true end,
+        set=function(value)local c=selectedConversation();if c then Z.store:SetKeep(c.key,value)end end})
+    form:Buttons({anchor='exportSelected',
+        {text=t('Ausgewähltes Gespräch exportieren …','Export selected conversation …'),visible=hasConversation,onClick=function()
+            local c=selectedConversation();if c then U.ExportConversation(c)end
+        end}})
+    note(form,'Gespräch schließen blendet es aus und erhält den Verlauf. Verlauf löschen leert nur das lokale Archiv.','Closing a conversation preserves its history. Clearing history only empties the local archive.')
+    form:Buttons({anchor='clearActions',
+        {text=t('Verlauf des ausgewählten Gesprächs löschen …','Clear selected conversation history …'),variant='danger',onClick=function()
+            local c=selectedConversation()
+            if not c then U.Notice(Z.L('Wähle zuerst ein Gespräch.','Select a conversation first.'));return end
+            view:Confirm({title=t('Verlauf des ausgewählten Gesprächs löschen','Clear selected conversation history'),accept=t('Löschen','Delete'),variant='danger',
+                text=Z.L('Lokalen Verlauf von ','Clear local history for ')..c.name..'?',
+                onAccept=function()Z.store:Clear(c.key);U.RefreshSettings()end})
+        end},
+        {text=t('Alle lokalen Verläufe löschen …','Clear all local history …'),variant='danger',onClick=function()
+            view:Confirm({title=t('Alle lokalen Verläufe löschen','Clear all local history'),accept=t('Löschen','Delete'),variant='danger',
+                text=Z.L('Alle lokalen Verläufe löschen?','Clear all local history?'),
+                onAccept=function()Z.store:ClearAll();U.RefreshSettings()end})
+        end}})
+end
+function builders.blizzard(page,view)
+    local form=newForm(page,view)
+    Z.NativeChatOptions.Build(form,{note=note,toggle=toggle,select=select,t=t})
+end
+local function spec()
+    local list={}
+    for i,page in ipairs(pages)do
+        list[i]={key=page.key,title=page.title,icon=Z.ChatTheme.pageIcons[page.key],build=builders[page.key]}
+    end
+    return{label='Chat',version=Z.VERSION,tr=tr,pages=list,embeddedNav='side',embeddedMinWidth=520,
+        onPage=function(key)
+            U.settingsPage=key
+            if U.settingsView then
+                U.settingsView:SetNote(key=='blizzard'and Z.L('Änderungen erst nach Vorschau bestätigen.','Confirm changes after preview.')or Z.L('Änderungen werden sofort gespeichert.','Changes are saved immediately.'))
+            end
+        end}
+end
+-- Title strip and the room below it for the view; called with every layout of the window.
+function U.LayoutOptions()
+    if not U.settingsBody then return end
+    local T=Z.ChatTheme;local panel=U.settingsPanel;local w=panel:GetWidth();local h=panel:GetHeight()
+    T.Place(U.optionsTitle,18,10,math.max(70,w-210),28,panel)
+    T.Place(U.settingsBody,0,44,w,math.max(1,h-44),panel)
+    if U.optionsLivePreview then U.optionsLivePreview.previewOpacity=Z.store.settings.alphaInactive end
+    if U.settingsPanel:IsShown()then T.Opacity(U.currentAlpha or Z.store.settings.alphaActive)end
 end
 function U.OpenSettings(page)
     U.Open();U.settingsPage=page or'appearance'
     U.input:ClearFocus();U.search:ClearFocus();if U.menu then U.menu:Hide()end
-    if not U.settingsScroll then
-        local T=Z.Theme
-        U.optionsTitle=T.Text(U.settingsPanel,Z.L('Einstellungen','Settings'),22,true)
-        U.settingsScroll=CreateFrame('ScrollFrame',nil,U.settingsPanel);U.settingsScroll:SetClipsChildren(true)
-        U.settingsContent=CreateFrame('Frame',nil,U.settingsScroll);U.settingsScroll:SetScrollChild(U.settingsContent)
-        U.optionsScrollbar=CreateFrame('Slider',nil,U.settingsPanel,'BackdropTemplate');T.Panel(U.optionsScrollbar,'field','line')
-        U.optionsScrollbar:SetOrientation('VERTICAL');U.optionsScrollbar:SetThumbTexture('Interface\\Buttons\\UI-ScrollBar-Knob')
-        U.optionsScrollbar:SetScript('OnValueChanged',function(_,v)if not U.optionsUpdating then U.optionsScroll=v;U.settingsScroll:SetVerticalScroll(v)end end)
-        U.settingsScroll:EnableMouseWheel(true);U.settingsScroll:SetScript('OnMouseWheel',function(_,delta)
-            U.optionsScroll=math.max(0,math.min(U.optionsMaxScroll,U.optionsScroll-delta*40));U.settingsScroll:SetVerticalScroll(U.optionsScroll);U.LayoutOptions()
-        end)
-        U.optionsFooter=T.Text(U.settingsPanel,Z.L('Änderungen werden sofort gespeichert.','Changes are saved immediately.'),11,false,'muted')
-        U.optionRows={};U.optionTabs={}
-        for i,entry in ipairs(pages)do
-            local id=entry[1];local b=T.Button(U.settingsNav,'',function()U.OpenSettings(id)end)
-            b.icon=T.Icon(b,{slot=id});b.caption=T.Text(b,Z.L(entry[2],entry[3]),13,true)
-            b.tip=Z.L(entry[2],entry[3]);U.optionTabs[i]=b
-        end
-    end
-    U.optionsScroll=0;U.listPanel:Hide();U.chatPanel:Hide();U.settingsNav:Show();U.settingsPanel:Show();U.back:Show()
-    buildSpecs();U.Layout()
+    U.listPanel:Hide();U.chatPanel:Hide();U.settingsPanel:Show();U.back:Show();U.Layout()
+    if not U.settingsView then U.settingsView=Window.New(spec(),U.settingsBody)end
+    local view=U.settingsView
+    -- The Blizzard page lists the chat tabs of this moment; it is built again every time.
+    if U.settingsPage=='blizzard'then view:Rebuild('blizzard')end
+    view:SelectPage(U.settingsPage);U.settingsPage=view:CurrentPage()or U.settingsPage
+    view:Refresh()
 end

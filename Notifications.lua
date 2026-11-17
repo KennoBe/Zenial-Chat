@@ -122,11 +122,11 @@ end
 local function updateField(f)
     local text=f.edit:GetText();f.hint:SetShown(text==''and not f.edit:HasFocus())
     f.count:SetText(#text..'/'..f.max)
-    if #text>f.max then f.count:SetTextColor(Z.Theme.Color('red'))else f.count:SetTextColor(Z.Theme.Color('muted'))end
+    if #text>f.max then f.count:SetTextColor(Z.ChatTheme.Color('red'))else f.count:SetTextColor(Z.ChatTheme.Color('muted'))end
 end
 -- Heights: 80 plain, 108 with the reply line, plus the bottom row (focus or error).
 local function layout(f)
-    local T=Z.Theme;local reply=f.replyKey~=nil;local failed=N.state=='error'
+    local T=Z.ChatTheme;local reply=f.replyKey~=nil;local failed=N.state=='error'
     local row=failed or f.edit:HasFocus()and reply;local y=reply and ROW_Y or PLAIN_ROW_Y
     f.editBg:SetShown(reply);f:SetHeight(row and y+20 or reply and 108 or 80)
     f.keys:SetShown(row and not failed);f.count:SetShown(row and not failed)
@@ -136,7 +136,7 @@ local function layout(f)
     refreshRows()
 end
 local function setBody(f,text,color)
-    f.body:SetText(text);f.body:SetTextColor(Z.Theme.Color(color or'text'))
+    f.body:SetText(text);f.body:SetTextColor(Z.ChatTheme.Color(color or'text'))
 end
 local function showError(f,message,native)
     N.state='error';f.nativeOffered=native==true;setBody(f,message,'red');layout(f)
@@ -180,8 +180,8 @@ function N.HideAll()
     clearQueue();if N.frame then N.frame:Hide()end
 end
 local function buildRow(f)
-    local T=Z.Theme;local row
-    row=T.Button(f,'',function()N.Show(row.key)end,'surface')
+    local T=Z.ChatTheme;local row
+    row=T.Button(f,'',function()N.Show(row.key)end)
     row.icon=T.Icon(row,{});T.Place(row.icon,6,6,22,22,row)
     row.name=T.Text(row,'',12,true,'goldBright');row.name:SetWordWrap(false);T.Place(row.name,34,3,170,16,row)
     row.preview=T.Text(row,'',11,false,'muted');row.preview:SetWordWrap(false);T.Place(row.preview,34,18,276,14,row)
@@ -191,7 +191,7 @@ local function buildRow(f)
 end
 function refreshRows()
     local f=N.frame;if not f then return end
-    local T=Z.Theme;local q=N.queue;local top=f:GetHeight()+ROW_GAP;local shown=0
+    local T=Z.ChatTheme;local q=N.queue;local top=f:GetHeight()+ROW_GAP;local shown=0
     for i=1,2 do
         local entry=q[i]and waiting[q[i]];local row=N.rows[i]
         if entry then
@@ -210,7 +210,7 @@ function refreshRows()
     if f.SetClampRectInsets then pcall(f.SetClampRectInsets,f,0,0,0,-(shown*(ROW_H+ROW_GAP)))end
 end
 local function smallButton(parent,label,fn)
-    local b=Z.Theme.Button(parent,label,fn);Z.Theme.Font(b.label,11,true,'text');b.label:SetJustifyH('CENTER');b.label:SetJustifyV('MIDDLE');b:Hide();return b
+    local b=Z.ChatTheme.Button(parent,label,fn);Z.ChatTheme.Font(b.label,11,true,'text');b.label:SetJustifyH('CENTER');b.label:SetJustifyV('MIDDLE');b:Hide();return b
 end
 function N.Submit()
     local f=N.frame;local c=f and f.replyKey and Z.store:Get(f.replyKey);if not c then return end
@@ -227,8 +227,8 @@ function N.Submit()
     end
 end
 local function buildFrame()
-    local T=Z.Theme
-    local f=T.Frame(UIParent,'shell','gold');N.frame=f;f:SetSize(320,80);f:SetFrameStrata('DIALOG')
+    local T=Z.ChatTheme
+    local f=T.Dialog(UIParent);N.frame=f;f:SetSize(320,80);f:SetFrameStrata('DIALOG')
     f:SetClampedToScreen(true);f:SetMovable(true);N.ApplyPosition();buildFade(f)
     f.icon=T.Icon(f,{});T.Place(f.icon,10,8,26,26,f)
     f.title=T.Text(f,'',13,true,'goldBright');T.Place(f.title,44,7,236,16,f)
@@ -290,7 +290,7 @@ local function buildFrame()
 end
 -- Fills the banner for a conversation: icon, names, reply line. The message body is set by the caller.
 function present(f,conv)
-    local T=Z.Theme;local store=Z.store
+    local T=Z.ChatTheme;local store=Z.store
     local person=store and type(conv.name)=='string'and store:Person(conv.name)or nil
     local class=conv.classFile or person and person.class
     T.SetIcon(f.icon,{kind=conv.kind,classFile=class})

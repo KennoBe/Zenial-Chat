@@ -3,13 +3,13 @@
 local _,Z=...
 local V={};Z.PhraseUI=V
 local WIDTH,PAGE_HEIGHT=520,574
-local TOP,TAB_HEIGHT=36,32 -- title strip; tab bar (only with several pages)
+local TOP,TAB_HEIGHT=44,32 -- title strip (the dialog header); tab bar (only with several pages)
 local ROWS,ROW_HEIGHT=10,34
 local LIST_TOP=104
 local STEP=3 -- list entries per mouse wheel notch
 local f,rows,items,offset,selectedId,category,preferred,errorText,updating,editing
 local pages,frames={},{} -- spec and page frame per page id
-local function T()return Z.Theme end
+local function T()return Z.ChatTheme end
 local function L(de,en)return Z.L(de,en)end
 local function tableAndStatus()
     local C,K,G=Z.PhraseCodec,Z.Calibration,Z.GarbleMap
@@ -98,12 +98,12 @@ end
 local function row(index)
     if rows[index]then return rows[index]end
     local theme=T()
-    local r=theme.Button(f.list,'',nil,'surface');r.label:Hide()
+    local r=theme.Button(f.list,'',nil);r.label:Hide()
     r.title=theme.Text(r,'',12,true,'text');r.title:SetWordWrap(false)
     r.sub=theme.Text(r,'',11,false,'muted');r.sub:SetWordWrap(false)
-    r.star=theme.Button(r,'☆',function()
+    r.star=theme.Button(r,'',function()
         if r.phrase then Z.Phrases.ToggleFavorite(r.phrase.id);V.Refresh()end
-    end)
+    end,'ghost');theme.Glyph(r.star,'star',18)
     r.star.tip=L('Favorit','Favorite')
     r.edit=theme.Button(r,L('Ändern','Edit'),function()if r.phrase then startEdit(r.phrase.id)end end)
     if r.RegisterForClicks then r:RegisterForClicks('LeftButtonUp','RightButtonUp')end
@@ -134,7 +134,7 @@ local function refreshXf()
             if item.header then
                 r.phrase=nil;r.title:SetText(item.header);r.title:SetTextColor(theme.Color('goldBright'));r.sub:SetText('');r.edit:Hide()
                 theme.Place(r.title,10,8,width-20,16,r);r.star:Hide()
-                r:SetBackdropBorderColor(theme.Color('line'))
+                theme.SetActive(r,false)
             else
                 local phrase=item.phrase;r.phrase=phrase
                 r.title:SetText(phrase.de);r.title:SetTextColor(theme.Color('text'));r.sub:SetText(phrase.en)
@@ -142,8 +142,8 @@ local function refreshXf()
                 theme.Place(r.title,10,3,width-(own and 126 or 56),15,r);theme.Place(r.sub,10,17,width-(own and 126 or 56),13,r)
                 theme.Place(r.edit,width-108,3,66,ROW_HEIGHT-9,r);r.edit:SetShown(own)
                 theme.Place(r.star,width-38,3,32,ROW_HEIGHT-9,r);r.star:Show()
-                r.star.label:SetText(P.IsFavorite(phrase.id)and'★'or'☆')
-                r:SetBackdropBorderColor(theme.Color(phrase.id==selectedId and'gold'or'border'))
+                theme.GlyphColor(r.star,P.IsFavorite(phrase.id)and'goldBright'or'dim')
+                theme.SetActive(r,phrase.id==selectedId)
             end
         end
     end
@@ -154,8 +154,7 @@ local function refreshXf()
     f.empty:SetShown(#items==0);f.empty:SetText(L('Keine Phrase gefunden.','No phrase found.'))
     for key,button in pairs(f.categories)do
         local active=(key==''and category==nil)or key==category
-        button.label:SetTextColor(theme.Color(active and'goldBright'or'text'))
-        button:SetBackdropBorderColor(theme.Color(active and'gold'or'border'))
+        theme.SetActive(button,active)
     end
     -- Status of the character table, preview and warnings.
     local tbl,status,languageId=tableAndStatus()
@@ -187,8 +186,7 @@ local function refreshXf()
     f.say:SetEnabled(enabled);f.yell:SetEnabled(enabled)
     for _,button in ipairs({f.say,f.yell})do
         local mark=preferred==button.channel
-        button.label:SetTextColor(theme.Color(not enabled and'muted'or mark and'goldBright'or'text'))
-        button:SetBackdropBorderColor(theme.Color(mark and'gold'or'border'))
+        theme.SetActive(button,mark)
     end
     local edit=editing~=nil
     for _,w in ipairs({f.status,f.preview,f.warning,f.say,f.yell,f.custom})do w:SetShown(not edit)end
@@ -224,7 +222,7 @@ local function buildXf(page,width,height)
     local keys={''};for _,key in ipairs(Z.PhraseData.categories)do keys[#keys+1]=key end
     local perRow=4;local cw=math.floor((width-24-(perRow-1)*6)/perRow)
     for i,key in ipairs(keys)do
-        local b=theme.Button(page,key==''and L('Alle','All')or Z.Phrases.CategoryLabel(key),function()
+        local b=theme.Chip(page,key==''and L('Alle','All')or Z.Phrases.CategoryLabel(key),function()
             category=key~=''and key or nil;offset=0;V.Refresh()
         end)
         local col,line=(i-1)%perRow,math.floor((i-1)/perRow)
@@ -233,10 +231,8 @@ local function buildXf(page,width,height)
     f.list=CreateFrame('Frame',nil,page);f.list:SetClipsChildren(true)
     theme.Place(f.list,12,LIST_TOP,width-24-18,ROWS*ROW_HEIGHT,page)
     f.list:EnableMouseWheel(true);f.list:SetScript('OnMouseWheel',function(_,delta)setOffset(offset-delta*STEP)end)
-    f.scrollbar=CreateFrame('Slider',nil,page,'BackdropTemplate');theme.Panel(f.scrollbar,'field','line')
-    f.scrollbar:SetOrientation('VERTICAL');f.scrollbar:SetValueStep(1);f.scrollbar:SetThumbTexture('Interface\\Buttons\\UI-ScrollBar-Knob')
+    f.scrollbar=theme.ScrollBar(page,function(value)if not updating then setOffset(value)end end)
     theme.Place(f.scrollbar,width-12-14,LIST_TOP,14,ROWS*ROW_HEIGHT,page)
-    f.scrollbar:SetScript('OnValueChanged',function(_,value)if not updating then setOffset(value)end end)
     f.empty=theme.Text(f.list,'',12,false,'muted');theme.Place(f.empty,10,10,width-60,20,f.list)
     local y=LIST_TOP+ROWS*ROW_HEIGHT+6
     f.status=theme.Text(page,'',11,false,'muted');f.status:SetWordWrap(false);theme.Place(f.status,12,y,width-24,14,page)
@@ -275,22 +271,22 @@ local function layout()
     local width=math.floor((WIDTH-24-(#list-1)*6)/math.max(1,#list))
     for i,entry in ipairs(list)do
         local b=f.tabs[entry.id]
-        if not b then local id=entry.id;b=theme.Button(f,'',function()V.SetPage(id)end);f.tabs[id]=b end
+        if not b then local id=entry.id;b=theme.Tab(f,'',function()V.SetPage(id)end);f.tabs[id]=b end
         theme.Place(b,12+(i-1)*(width+6),TOP,width,26,f)
         b.label:SetText(entry.spec.label());b:SetShown(tabs)
         local active=entry.id==V.page and tabs
-        b.label:SetTextColor(theme.Color(active and'goldBright'or'text'));b:SetBackdropBorderColor(theme.Color(active and'gold'or'border'))
+        theme.SetActive(b,active)
     end
     for _,page in pairs(frames)do theme.Place(page,0,top,WIDTH,PAGE_HEIGHT,f)end
 end
 local function build()
     if f then return end
     local theme=T()
-    f=theme.Frame(UIParent,'shell','gold');f:SetFrameStrata('HIGH');f:SetSize(WIDTH,TOP+PAGE_HEIGHT);f:SetPoint('CENTER');f:EnableMouse(true)
+    f=theme.Dialog(UIParent);f:SetFrameStrata('HIGH');f:SetSize(WIDTH,TOP+PAGE_HEIGHT);f:SetPoint('CENTER');f:EnableMouse(true)
     f:SetClampedToScreen(true);f:Hide()
     f.tabs={}
-    f.title=theme.Text(f,L('Vorlagen','Templates'),14,true);f.title:SetPoint('TOPLEFT',12,-12)
-    f.close=Z.CloseButton(f,function()V.Close()end,L('Schließen','Close'));theme.Place(f.close,WIDTH-38,7,28,26,f)
+    f.title=Z.Kit.Text(f,L('Vorlagen','Templates'),'title')
+    f.header=Z.Kit.DialogHeader(f,f.title,function()V.Close()end);f.close=f.header.close;f.header:SetSubtitle('')
 end
 -- Pages: spec={order=,label=function()->string,build=function(page,width,height),refresh=function(page),
 -- show=function(page) (optional, the page became the shown one), hide=function(page) (optional, release the keyboard)}.

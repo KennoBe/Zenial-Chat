@@ -22,6 +22,7 @@ local defaults = {
     toastDuration = 5, suppressInCombat = false,
     xfChatHint = true,
 }
+Store.Defaults = defaults
 local enumerations = {
     nameFormat = { full = true, first = true, last = true, initialLast = true, firstInitial = true, initials = true },
     senderIcon = { class = true, race = true, none = true },

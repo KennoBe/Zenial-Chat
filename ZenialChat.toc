@@ -3,10 +3,16 @@
 ## Notes: Native messenger with conversations and a shared local history
 ## Notes-deDE: Nativer Messenger mit Gesprächen und gemeinsamem lokalen Verlauf
 ## Author: ZENIAL contributors
-## Version: 0.5.0
+## Version: 0.6.0
 ## SavedVariables: ZenialChatDB, ZenialMinimapDB
 ## IconTexture: Interface\AddOns\ZenialChat\Media\Icon.tga
 ## X-License: MIT
+Theme.lua
+ThemeTokens.lua
+ThemeSkin.lua
+ThemeKit.lua
+Form.lua
+Window.lua
 Core.lua
 Store.lua
 Format.lua
@@ -29,7 +35,7 @@ GarbleMap.lua
 Interpret.lua
 NativeChat.lua
 NativeChatUnread.lua
-Theme.lua
+ChatTheme.lua
 Transcript.lua
 UI.lua
 SearchUI.lua

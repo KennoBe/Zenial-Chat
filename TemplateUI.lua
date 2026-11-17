@@ -8,7 +8,7 @@ local ROW_HEIGHT,MAX_ROWS,STEP=34,8,3
 local EDIT_TOP=HEIGHT-216
 local PER_ROW,MAX_CATEGORIES=5,9
 local pg,rows,catButtons,items,offset,selectedId,filter,errorText,confirmId,updating,visibleRows
-local function T()return Z.Theme end
+local function T()return Z.ChatTheme end
 local function L(de,en)return Z.L(de,en)end
 local errorTexts={
     empty=function()return L('Text fehlt.','Text is missing.')end,
@@ -78,12 +78,12 @@ end
 local function row(index)
     if rows[index]then return rows[index]end
     local theme=T()
-    local r=theme.Button(pg.list,'',nil,'surface');r.label:Hide()
+    local r=theme.Button(pg.list,'',nil);r.label:Hide()
     r.title=theme.Text(r,'',12,true,'text');r.title:SetWordWrap(false)
     r.sub=theme.Text(r,'',11,false,'muted');r.sub:SetWordWrap(false)
-    r.star=theme.Button(r,'☆',function()
+    r.star=theme.Button(r,'',function()
         if r.template then Z.Phrases.ToggleFavorite(r.template.id);V.Refresh()end
-    end)
+    end,'ghost');theme.Glyph(r.star,'star',18)
     r.star.tip=L('Favorit','Favorite')
     r:SetScript('OnClick',function(self)if self.template then choose(self.template.id)end end)
     r:EnableMouseWheel(true);r:SetScript('OnMouseWheel',function(_,delta)setOffset(offset-delta*STEP)end)
@@ -101,13 +101,13 @@ local function refresh()
         local b=catButtons[i];local key=keys[i]
         if key then
             if not b then
-                b=theme.Button(pg,'',function(self)filter=self.category~=''and self.category or nil;offset=0;V.Refresh()end)
+                b=theme.Chip(pg,'',function(self)filter=self.category~=''and self.category or nil;offset=0;V.Refresh()end)
                 catButtons[i]=b
             end
             b.category=key;b.label:SetText(key==''and L('Alle','All')or key)
             theme.Place(b,12+((i-1)%PER_ROW)*(cw+6),40+math.floor((i-1)/PER_ROW)*30,cw,26,pg);b:Show()
             local active=(key==''and filter==nil)or key==filter
-            b.label:SetTextColor(theme.Color(active and'goldBright'or'text'));b:SetBackdropBorderColor(theme.Color(active and'gold'or'border'))
+            theme.SetActive(b,active)
         elseif b then b:Hide()end
     end
     -- list
@@ -126,14 +126,14 @@ local function refresh()
             r:Show()
             if item.header then
                 r.template=nil;r.title:SetText(item.header);r.title:SetTextColor(theme.Color('goldBright'));r.sub:SetText('')
-                theme.Place(r.title,10,8,width-20,16,r);r.star:Hide();r:SetBackdropBorderColor(theme.Color('line'))
+                theme.Place(r.title,10,8,width-20,16,r);r.star:Hide();theme.SetActive(r,false)
             else
                 local t=item.template;r.template=t
                 r.title:SetText(t.name);r.title:SetTextColor(theme.Color('text'));r.sub:SetText(t.text)
                 theme.Place(r.title,10,3,width-56,15,r);theme.Place(r.sub,10,17,width-56,13,r)
                 theme.Place(r.star,width-38,3,32,ROW_HEIGHT-9,r);r.star:Show()
-                r.star.label:SetText(P.IsFavorite(t.id)and'★'or'☆')
-                r:SetBackdropBorderColor(theme.Color(t.id==selectedId and'gold'or'border'))
+                theme.GlyphColor(r.star,P.IsFavorite(t.id)and'goldBright'or'dim')
+                theme.SetActive(r,t.id==selectedId)
             end
         end
     end
@@ -160,9 +160,7 @@ local function build(page,width,height)
     pg.search:SetScript('OnEnterPressed',function(self)self:ClearFocus()end)
     pg.list=CreateFrame('Frame',nil,pg);pg.list:SetClipsChildren(true)
     pg.list:EnableMouseWheel(true);pg.list:SetScript('OnMouseWheel',function(_,delta)setOffset(offset-delta*STEP)end)
-    pg.scrollbar=CreateFrame('Slider',nil,pg,'BackdropTemplate');theme.Panel(pg.scrollbar,'field','line')
-    pg.scrollbar:SetOrientation('VERTICAL');pg.scrollbar:SetValueStep(1);pg.scrollbar:SetThumbTexture('Interface\\Buttons\\UI-ScrollBar-Knob')
-    pg.scrollbar:SetScript('OnValueChanged',function(_,value)if not updating then setOffset(value)end end)
+    pg.scrollbar=theme.ScrollBar(pg,function(value)if not updating then setOffset(value)end end)
     pg.empty=theme.Text(pg.list,'',12,false,'muted');theme.Place(pg.empty,10,10,width-60,20,pg.list)
     -- editor: Name, Kategorie, Text with counter, token buttons, actions
     local function field(label,y,max)
@@ -185,12 +183,12 @@ local function build(page,width,height)
         theme.Place(b,100+(i-1)*(tw+6),EDIT_TOP+102,tw,26,pg)
     end
     local bw=math.floor((width-24-3*6)/4)
-    local function action(index,label,fn)
-        local b=theme.Button(pg,label,fn);theme.Place(b,12+(index-1)*(bw+6),EDIT_TOP+136,bw,28,pg);return b
+    local function action(index,label,fn,style)
+        local b=theme.Button(pg,label,fn,style);theme.Place(b,12+(index-1)*(bw+6),EDIT_TOP+136,bw,28,pg);return b
     end
     pg.use=action(1,L('Übernehmen','Use'),use)
-    pg.save=action(2,L('Speichern','Save'),save)
-    pg.delete=action(3,L('Löschen','Delete'),delete)
+    pg.save=action(2,L('Speichern','Save'),save,'primary')
+    pg.delete=action(3,L('Löschen','Delete'),delete,'danger')
     pg.new=action(4,L('Neu','New'),new)
     pg.error=theme.Text(pg,'',11,false,'red');pg.error:SetWordWrap(true);theme.Place(pg.error,12,EDIT_TOP+170,width-24,28,pg)
 end

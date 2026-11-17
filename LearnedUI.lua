@@ -9,7 +9,7 @@ local EDIT_TOP=HEIGHT-214
 local LANGUAGES={1,7}
 local names={[1]={'Orcisch','Orcish'},[7]={'Gemeinsprache','Common'}}
 local pg,rows,langButtons,items,offset,language,errorText,confirmAll,updating
-local function T()return Z.Theme end
+local function T()return Z.ChatTheme end
 local function L(de,en)return Z.L(de,en)end
 local function I()return Z.Interpret end
 local function invalidate()
@@ -59,7 +59,7 @@ end
 local function row(index)
     if rows[index]then return rows[index]end
     local theme=T()
-    local r=theme.Button(pg.list,'',nil,'surface');r.label:Hide()
+    local r=theme.Button(pg.list,'',nil);r.label:Hide()
     r.title=theme.Text(r,'',12,true,'text');r.title:SetWordWrap(false)
     r.sub=theme.Text(r,'',11,false,'muted');r.sub:SetWordWrap(false)
     r:SetScript('OnClick',function(self)if self.entry then choose(self.entry)end end)
@@ -73,7 +73,7 @@ local function refresh()
         local b=langButtons[id]
         b.label:SetText(L(names[id][1],names[id][2])..' · '..I().CountLearned(id))
         local active=id==language
-        b.label:SetTextColor(theme.Color(active and'goldBright'or'text'));b:SetBackdropBorderColor(theme.Color(active and'gold'or'border'))
+        theme.SetActive(b,active)
     end
     items=I().Learned(language,pg.search:GetText())
     offset=math.max(0,math.min(maxOffset(),offset or 0))
@@ -87,7 +87,7 @@ local function refresh()
             -- A word may contain a pipe (it comes from chat or from the field): shown as text, never as markup.
             r.title:SetText((entry.key:gsub('|','||')));r.sub:SetText((entry.meaning:gsub('|','||')))
             theme.Place(r.title,10,3,width-20,15,r);theme.Place(r.sub,10,17,width-20,13,r)
-            r:SetBackdropBorderColor(theme.Color(entry.key==I().Key(pg.word:GetText())and'gold'or'border'))
+            theme.SetActive(r,entry.key==I().Key(pg.word:GetText()))
         end
     end
     updating=true
@@ -106,7 +106,7 @@ local function build(page,width)
     pg=page;rows={};langButtons={};items={};offset=0
     local lw=math.floor((width-24-6)/2)
     for i,id in ipairs(LANGUAGES)do
-        local b=theme.Button(pg,'',function()setLanguage(id)end)
+        local b=theme.Chip(pg,'',function()setLanguage(id)end)
         theme.Place(b,12+(i-1)*(lw+6),4,lw,28,pg);langButtons[id]=b
     end
     pg.search=theme.Input(pg)
@@ -117,10 +117,8 @@ local function build(page,width)
     pg.list=CreateFrame('Frame',nil,pg);pg.list:SetClipsChildren(true)
     theme.Place(pg.list,12,LIST_TOP,width-24-18,ROWS*ROW_HEIGHT,pg)
     pg.list:EnableMouseWheel(true);pg.list:SetScript('OnMouseWheel',function(_,delta)setOffset(offset-delta*STEP)end)
-    pg.scrollbar=CreateFrame('Slider',nil,pg,'BackdropTemplate');theme.Panel(pg.scrollbar,'field','line')
-    pg.scrollbar:SetOrientation('VERTICAL');pg.scrollbar:SetValueStep(1);pg.scrollbar:SetThumbTexture('Interface\\Buttons\\UI-ScrollBar-Knob')
+    pg.scrollbar=theme.ScrollBar(pg,function(value)if not updating then setOffset(value)end end)
     theme.Place(pg.scrollbar,width-12-14,LIST_TOP,14,ROWS*ROW_HEIGHT,pg)
-    pg.scrollbar:SetScript('OnValueChanged',function(_,value)if not updating then setOffset(value)end end)
     pg.empty=theme.Text(pg.list,'',12,false,'muted');theme.Place(pg.empty,10,10,width-60,20,pg.list)
     local function field(label,y)
         local caption=theme.Text(pg,label,12,false,'muted');theme.Place(caption,12,EDIT_TOP+y+7,84,16,pg)
@@ -133,12 +131,12 @@ local function build(page,width)
     pg.word=field(L('Wort','Word'),0)
     pg.meaning=field(L('Bedeutung','Meaning'),34)
     local bw=math.floor((width-24-12)/3)
-    local function action(index,label,fn)
-        local b=theme.Button(pg,label,fn);theme.Place(b,12+(index-1)*(bw+6),EDIT_TOP+72,bw,28,pg);return b
+    local function action(index,label,fn,style)
+        local b=theme.Button(pg,label,fn,style);theme.Place(b,12+(index-1)*(bw+6),EDIT_TOP+72,bw,28,pg);return b
     end
-    action(1,L('Speichern','Save'),save)
-    action(2,L('Vergessen','Forget'),forget)
-    pg.forgetAll=action(3,'',forgetAll)
+    action(1,L('Speichern','Save'),save,'primary')
+    action(2,L('Vergessen','Forget'),forget,'danger')
+    pg.forgetAll=action(3,'',forgetAll,'danger')
     pg.error=theme.Text(pg,'',11,false,'red');pg.error:SetWordWrap(true);theme.Place(pg.error,12,EDIT_TOP+108,width-24,28,pg)
     pg.count=theme.Text(pg,'',11,false,'muted');theme.Place(pg.count,12,EDIT_TOP+142,width-24,14,pg)
 end
