@@ -217,8 +217,14 @@ function N.Submit()
     local text=f.edit:GetText();if not text:find('%S')then return end
     if N.state=='error'then N.state=nil;setBody(f,f.message or'')end
     if Z.adapter:Locked()then showError(f,Z.L('Senden ist gerade gesperrt.','Sending is locked right now.'),true);return end
-    local ok,err,id=Z.adapter:Send(c,text)
-    if not ok then showError(f,Z.L('Nicht gesendet: ','Not sent: ')..tostring(err or''));return end
+    -- A warning about an offline contact is confirmed by sending the same text again.
+    local confirm=N.offlineConfirm;N.offlineConfirm=nil
+    local force=confirm~=nil and confirm.key==c.key and confirm.text==text
+    local ok,err,id,code=Z.adapter:Send(c,text,force and{force=true}or nil)
+    if not ok then
+        if code=='offline'then N.offlineConfirm={key=c.key,text=text};showError(f,tostring(err or''));return end
+        showError(f,Z.L('Nicht gesendet: ','Not sent: ')..tostring(err or''));return
+    end
     Z.store:AddSent(c.key,text);Z.store:SetDraft(c.key,'')
     if id then N.sent[id]={key=c.key,text=text}end
     f.edit:ClearFocus();N.Dismiss()
@@ -341,15 +347,17 @@ function N.OnRecovery(key)
     if not key or not Z.adapter or not Z.store then return end
     for id,sent in pairs(N.sent)do
         if sent.key==key and Z.adapter:AttemptState(id)=='failed'then
-            local reason
-            for _,r in ipairs(Z.adapter:Recoveries(key))do if r.id==id and not r.unconfirmed then reason=r.error end end
+            local reason,restored
+            for _,r in ipairs(Z.adapter:Recoveries(key))do if r.id==id and not r.unconfirmed then reason=r.error;restored=r.restored end end
             local c=Z.store:Get(key)
             if reason and c then
                 local f=N.frame or buildFrame()
                 N.sent[id]=nil
-                -- Busy: the text stays in the window's recovery line; the conversation waits as a row.
+                -- Busy: the text stays in the draft or the window's recovery line; the conversation waits as a row.
                 if N.Busy()and f.key~=key then enqueue(c,reason);return end
-                if(c.draft or'')==''then Z.store:SetDraft(key,sent.text);Z.adapter:DismissRecovery(id)end
+                -- The adapter already put a text with a known reason back into the empty draft.
+                if restored then Z.adapter:DismissRecovery(id)
+                elseif(c.draft or'')==''then Z.store:SetDraft(key,sent.text);Z.adapter:DismissRecovery(id)end
                 takeOver(f,c);showError(f,reason,false)
             end
             return

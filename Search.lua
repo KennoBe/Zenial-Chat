@@ -19,7 +19,7 @@ function S.Parse(raw)
     for term in raw:gmatch('%S+')do terms[#terms+1]=fold(term)end
     return terms,from
 end
--- options: key (one conversation), since (epoch)
+-- options: key (one conversation), since (epoch), filter (conversations of all others to include)
 function S.New(store,raw,options)
     options=options or{}
     local terms,from=S.Parse(raw)
@@ -27,9 +27,9 @@ function S.New(store,raw,options)
     local length=0;for _,term in ipairs(terms)do length=length+#term end
     if length<S.MIN_LENGTH and not from then self.done=true;self.empty=true;return self end
     if options.key then
-        local c=store:Get(options.key);if c then self.queue[1]=c end
+        local c=store:Get(options.key);if c and(not options.filter or options.filter(c))then self.queue[1]=c end
     else
-        for _,c in pairs(store.conversations)do self.queue[#self.queue+1]=c end
+        for _,c in pairs(store.conversations)do if not options.filter or options.filter(c)then self.queue[#self.queue+1]=c end end
         table.sort(self.queue,function(a,b)
             if(a.last or 0)~=(b.last or 0)then return(a.last or 0)>(b.last or 0)end
             return tostring(a.key)<tostring(b.key)

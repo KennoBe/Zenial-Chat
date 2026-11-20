@@ -4,13 +4,35 @@ local function selected()return Z.store and Z.store:Get(Z.store.db.ui.selected)e
 local function textTime(at)return Z.Format.Stamp('%H:%M',at or 0)end
 local titles={guild={'Gilde','Guild'},groups={'Gruppen','Groups'},people={'Direktnachrichten','Direct messages'},channels={'Kanäle','Channels'},opposite={'Gegnerische Fraktion','Opposite faction'}}
 local function caption(group)local a=titles[group]or{'Gespräche','Conversations'};return Z.L(a[1],a[2])end
+-- The adapter decides what the current view lists and what may be written (Adapter:Access).
+function U.ListFilter(c)return not Z.adapter or Z.adapter:Listed(c)end
+local function access(c)if not Z.adapter then return true,c~=nil and c.kind~='XFACTION'end;return Z.adapter:Access(c)end
+local function writable(c)local _,write=access(c);return c~=nil and write==true end
+local function presenceOf(c)
+    local p=Z.adapter and Z.adapter.presence
+    if not p or not c or(c.kind~='WHISPER'and c.kind~='BN_WHISPER')then return nil,false end
+    return p:State(c),true
+end
+-- Status dot: green online, grey offline, a faint ring colour for unknown.
+local function paintDot(dot,state)
+    Z.Theme.SetIcon(dot,'dot',state=='online'and'online'or state=='offline'and'muted'or'line',state and 1 or .7)
+end
 function U.Notice(message)
     U.Build();U.notice:SetText(message or'');U.notice:SetShown(message~=nil and message~='')
 end
 function U.RequestRefresh(reason,key)
+    -- A status change redraws only the dots, never the transcript.
+    if reason=='presence'then if U.frame then U.RefreshPresence(key)end;return end
     U.dirty=true
-    -- A draft stored from outside (the notice) reaches an input nobody is typing in.
-    if reason=='draft'and key and key==U.loadedKey and U.input and not U.input:HasFocus()then
+    -- The guild view or the rights changed: a running sidebar search follows the new filter.
+    if(reason=='guildview'or reason=='access'or reason=='identity')and U.frame and U.query and U.query~=''and Z.adapter then
+        local a=Z.adapter.access or{}
+        local signature=tostring(Z.adapter:GuildView())..'|'..tostring(a.officerRead)
+        if signature~=U.filterSignature then U.filterSignature=signature;if U.QueryChanged then U.QueryChanged()end end
+    end
+    -- A draft stored from outside (the notice, a restored failed message) reaches an input nobody is typing
+    -- in, or an empty one.
+    if reason=='draft'and key and key==U.loadedKey and U.input and(not U.input:HasFocus()or U.input:GetText()=='')then
         local c=Z.store:Get(key)
         if c and U.input:GetText()~=(c.draft or'')then
             U.historyPos=nil;U.historyDraft=nil;U.historyValue=nil
@@ -88,10 +110,17 @@ function U.HistoryArrow(key)
 end
 local function endHistory()U.historyPos=nil;U.historyDraft=nil end
 function U.Submit()
-    local c=selected();if not c or c.kind=='XFACTION'then return end
-    local text=U.input:GetText();local ok,err=Z.adapter:Send(c,text)
+    local c=selected();if not c or not writable(c)then return end
+    local text=U.input:GetText()
+    -- A warning about an offline contact is confirmed by sending the same text again.
+    local confirm=U.offlineConfirm;local force=confirm~=nil and confirm.key==c.key and confirm.text==text
+    U.offlineConfirm=nil
+    local ok,err,_,code=Z.adapter:Send(c,text,force and{force=true}or nil)
     if ok then Z.store:AddSent(c.key,text);endHistory();U.input:SetText('');Z.store:SetDraft(c.key,'');U.Notice('');U.RequestRefresh('message',c.key)
-    else U.Notice(err or Z.L('Nachricht konnte nicht gesendet werden.','Message could not be sent.'))end
+    else
+        if code=='offline'then U.offlineConfirm={key=c.key,text=text}end
+        U.Notice(err or Z.L('Nachricht konnte nicht gesendet werden.','Message could not be sent.'))
+    end
 end
 -- Installed once; chains through whatever function was there at install time and
 -- only claims a link while this window is shown and its input has focus.
@@ -115,8 +144,14 @@ end
 -- terms (optional) highlights what was searched for in the opened conversation.
 function U.Select(key,messageId,terms)
     U.Build();local c=Z.store:Get(key);if not c then return end
+    -- An officer chat without the right to read is never opened (a bookmark, a search hit). Returns false.
+    local listed,_,why=access(c)
+    if why=='officer'then U.Notice(Z.L('Kein Zugriff auf den Offizier-Chat.','No access to the officer chat.'));return false end
     local old=selected()
     if old and U.loadedKey==old.key then Z.store:SetDraft(old.key,U.historyPos and U.historyDraft or U.input:GetText())end
+    -- A guild chat opened from outside the list (notice, bookmark) brings its guild into view, so that the
+    -- sidebar and the input agree and a later identity refresh keeps the choice.
+    if not listed and Z.adapter and(c.kind=='GUILD'or c.kind=='OFFICER')then Z.adapter:SetGuildView(Z.adapter:CanonicalScope(c.scope))end
     endHistory()
     -- Leaving a conversation while reading further up keeps the place for the way back.
     U.scrollMemory=U.scrollMemory or{}
@@ -129,6 +164,8 @@ function U.Select(key,messageId,terms)
     local remembered=not messageId and old and old.key~=key and Z.store.settings.rememberScroll and(c.unread or 0)==0 and U.scrollMemory[key]or nil
     U.indexDirty=true;U.indexFull=true;U.indexSignature=nil;U.anchor=remembered;U.scroll=0;U.atEnd=not messageId and not remembered
     U.windowKey=nil;Z.Transcript.PrepareWindow(U,c,messageId or remembered and remembered.id or nil)
+    U.offlineConfirm=nil
+    if Z.adapter and Z.adapter.presence then Z.adapter.presence:Probe(c)end
     U.frame:Show();U.Layout();U.Refresh()
     if messageId then Z.Transcript.Reveal(U,c,messageId)end
 end
@@ -142,7 +179,7 @@ function U.Open()
     if not Z.ready then Z.Initialize()end
     U.Build();U.frame:Show();U.Layout();U.Refresh()
     local c=selected()
-    if Z.store.settings.focusOnOpen and c and c.kind~='XFACTION'and not U.settingsPanel:IsShown()then U.input:SetFocus()end
+    if Z.store.settings.focusOnOpen and c and writable(c)and not U.settingsPanel:IsShown()then U.input:SetFocus()end
 end
 function U.Toggle()
     if U.frame and U.frame:IsShown()then U.frame:Hide()else U.Open()end
@@ -230,7 +267,7 @@ function U.Prompt(title,text,fn)
 end
 -- Puts a quote at the cursor. Nothing is sent until the user does it.
 function U.QuoteMessage(msg,mode)
-    local c=selected();if not c or c.kind=='XFACTION'or not msg or msg.deleted then return end
+    local c=selected();if not c or not writable(c)or not msg or msg.deleted then return end
     U.input:SetFocus();U.input:Insert(Z.Format.Quote(c,msg,mode))
 end
 function U.OpenWhisper(name)
@@ -273,7 +310,7 @@ function U.MessageMenu(anchor,msg)
     local function add(label,run)items[#items+1]={text=label,run=run}end
     add(Z.L('Mit Absender kopieren','Copy with sender'),function()U.ShowCopy(Z.Format.MessageLine(c,msg,'sender'))end)
     add(Z.L('Mit Zeit und Absender kopieren','Copy with time and sender'),function()U.ShowCopy(Z.Format.MessageLine(c,msg,'time'))end)
-    if c.kind~='XFACTION'then add(Z.L('Zitieren','Quote'),function()U.QuoteMessage(msg)end)end
+    if writable(c)then add(Z.L('Zitieren','Quote'),function()U.QuoteMessage(msg)end)end
     if Z.Bookmarks then
         if Z.Bookmarks.Has(c.key,msg.id)then
             add(Z.L('Lesezeichen entfernen','Remove bookmark'),function()Z.Bookmarks.Remove(c.key,msg.id);U.Refresh()end)
@@ -317,6 +354,8 @@ local function conversationRow(index)
     row.divider=T.Line(row,4,48,100)
     row.time=T.Text(row,'',10,false,'muted');row.time:SetJustifyH('RIGHT')
     row.badge=T.Frame(row,'red','red');row.count=T.Text(row.badge,'',11,true,'shell');row.count:SetPoint('CENTER');row.count:SetJustifyH('CENTER')
+    -- On the icon frame and above its picture: the status of a direct-message partner.
+    row.dot=row.icon:CreateTexture(nil,'OVERLAY');row.dot:SetSize(9,9);paintDot(row.dot,'online');row.dot:Hide()
     row:RegisterForClicks('LeftButtonUp','RightButtonUp')
     row:SetScript('OnClick',function(self,button)
         if button=='RightButton'then
@@ -357,12 +396,38 @@ local function whisperIcon(c)
     end
     return''
 end
+-- The guild picker: only where there is a choice (an archive besides the current guild, or archives without one).
+local function guildLabel(entry)
+    if not entry then return Z.L('Gildenarchiv','Guild archive')end
+    return(entry.current and Z.L('Gilde: ','Guild: ')or Z.L('Archiv: ','Archive: '))..entry.label
+end
+function U.GuildMenu(anchor)
+    local a=Z.adapter;if not a then return end
+    local view=a:GuildView();local items={}
+    for _,entry in ipairs(a:GuildList())do
+        local mark=entry.scope==view and'• 'or''
+        local suffix=entry.current and Z.L(' (Aktuelle Gilde)',' (current guild)')or Z.L(' (Archiv)',' (archive)')
+        items[#items+1]={text=mark..entry.label..suffix,run=function()a:SetGuildView(entry.scope);U.Refresh()end}
+    end
+    if#items>0 then U.ShowMenu(anchor,items)end
+end
+local function guildPicker()
+    local a=Z.adapter;if not a then return nil end
+    local list=a:GuildList()
+    if#list==0 or#list==1 and list[1].current then return nil end
+    local view=a:GuildView()
+    for _,entry in ipairs(list)do if entry.scope==view then return entry end end
+    return false -- choice exists, nothing chosen (no guild)
+end
 function U.RefreshList()
     local run=U.query~=''and U.sidebarSearch or nil
-    local T=Z.ChatTheme;local list=Z.store:List(U.query or'',run and run.hits or nil);local width=U.metrics.sidebarWidth-16
+    local T=Z.ChatTheme;local list=Z.store:List(U.query or'',run and run.hits or nil,U.ListFilter);local width=U.metrics.sidebarWidth-16
     local compact=Z.store.settings.sidebarCompact and not U.metrics.iconOnly;local showPreview=U.metrics.showPreview and not compact
     local height=U.listViewport:GetHeight();local entries={};local y=0;local prior
     if run and not run.empty and(run.count>0 or not run.done)then entries[1]={summary=true,y=0,height=34};y=34 end
+    -- The guild group comes first in the list; the picker takes the place of its caption.
+    local picked=guildPicker()
+    if picked~=nil then entries[#entries+1]={pickerEntry=true,picker=picked or nil,y=y,height=30};y=y+30;prior='guild'end
     for _,c in ipairs(list)do
         local include=c.kind~='CHANNEL'or U.query~=''or Z.store.settings.publicChannels and Z.store.settings.enabledChannels[(c.channelName or''):lower()]==true
         if include then
@@ -373,11 +438,20 @@ function U.RefreshList()
         end
     end
     U.listScroll=math.min(U.listScroll,math.max(0,y-height));local rows,headers=0,0
-    local summaryShown=false
+    local summaryShown,pickerShown=false,false
     for _,entry in ipairs(entries)do
         local top=entry.y-U.listScroll
         if top+entry.height>=0 and top<height then
-            if entry.summary then
+            if entry.pickerEntry then
+                pickerShown=true
+                if not U.guildPicker then
+                    U.guildPicker=T.Dropdown(T.Button(U.listCanvas,'',function(self)U.GuildMenu(self)end))
+                    U.guildPicker:HookScript('OnEnter',function(self)T.Tooltip(self,self.tipTitle or'',Z.L('Gespeicherte Gildenchats ansehen','View stored guild chats'))end)
+                end
+                local text=guildLabel(entry.picker);U.guildPicker.tipTitle=text
+                U.guildPicker.label:SetText(U.metrics.iconOnly and''or text)
+                T.Place(U.guildPicker,2,top+2,width-4,entry.height-6,U.listCanvas);U.guildPicker:Show()
+            elseif entry.summary then
                 summaryShown=true
                 if not U.searchSummary then U.searchSummary=T.Button(U.listCanvas,'',function()U.OpenSearch(nil,U.query)end)end
                 U.searchSummary.label:SetText(run.done and string.format(Z.L('%d Treffer anzeigen','Show %d results'),run.count)or string.format(Z.L('Suche … %d Treffer','Searching … %d results'),run.count))
@@ -404,27 +478,75 @@ function U.RefreshList()
                 row.name:SetShown(not U.metrics.iconOnly);row.preview:SetShown(showPreview);row.time:SetShown(showPreview)
                 local unread=tonumber(c.unread)or 0;row.count:SetText(unread>99 and'99+'or tostring(unread))
                 local bx=U.metrics.iconOnly and width-19 or width-27;local by=compact and 7 or showPreview and 34 or 17
-                T.Place(row.badge,bx,by,23,19,row);row.badge:SetShown(unread>0)
+                -- Archived guild chats keep their count, but it must not look like new messages.
+                local _,_,why=access(c)
+                T.Place(row.badge,bx,by,23,19,row);row.badge:SetShown(unread>0 and why~='archive')
+                local state,person=presenceOf(c)
+                row.dot:SetShown(person and state~=nil)
+                if person and state then paintDot(row.dot,state);row.dot:ClearAllPoints();row.dot:SetPoint('BOTTOMRIGHT',row.icon,'BOTTOMRIGHT',2,-2)end
+                row.presenceKey=person and Z.adapter.presence:Key(c)or nil;row.dotState=person and state or nil
             end
         end
     end
     for i=rows+1,#U.rows do U.rows[i]:Hide()end;for i=headers+1,#U.headers do U.headers[i]:Hide()end
     if U.searchSummary and not summaryShown then U.searchSummary:Hide()end
-    U.listEmpty:SetShown(#list==0 and not U.metrics.iconOnly)
+    if U.guildPicker and not pickerShown then U.guildPicker:Hide()end
+    U.listEmpty:SetShown(#list==0 and not U.metrics.iconOnly and not pickerShown)
+end
+local statusWords={online={'Online','Online'},offline={'Offline','Offline'}}
+-- Header line under the name: online status for direct messages, archive or read-only state for guild chats.
+local function detailText(c)
+    local text=caption(Z.Store.Group(c.kind))
+    local state,person=presenceOf(c)
+    if person then
+        local w=statusWords[state]
+        return(w and Z.L(w[1],w[2])or Z.L('Status unbekannt','Status unknown'))..' · '..text
+    end
+    local _,_,why=access(c)
+    if why=='archive'then return text..' · '..Z.L('Archiv','Archive')end
+    if why=='permission'then return text..' · '..Z.L('Nur lesen','Read only')end
+    return text
+end
+-- Only the dots and the header line; called on status changes and once a second (observations expire).
+function U.RefreshPresence(keys)
+    if not U.frame then return end
+    local c=selected();local state,person=presenceOf(c)
+    if person then
+        local key=Z.adapter.presence:Key(c)
+        if type(keys)~='table'or keys[key]then paintDot(U.presenceDot,state);U.channelDetail:SetText(detailText(c))end
+    end
+    -- Without keys (the one-second tick) every visible dot is looked up again: observations expire silently.
+    for _,row in ipairs(U.rows)do
+        if row:IsShown()and row.presenceKey and(type(keys)~='table'or keys[row.presenceKey])then
+            local s=Z.adapter.presence:Lookup(row.presenceKey)
+            if s~=row.dotState then
+                row.dotState=s;row.dot:SetShown(s~=nil)
+                if s then paintDot(row.dot,s);row.dot:ClearAllPoints();row.dot:SetPoint('BOTTOMRIGHT',row.icon,'BOTTOMRIGHT',2,-2)end
+            end
+        end
+    end
 end
 function U.Refresh()
     if not U.frame then return end
     U.dirty=false;U.RefreshList();local c=selected()
     -- The header always names the conversation in full; an own display name comes first.
     U.channelName:SetText(c and(c.alias and c.alias~=''and c.alias..' ('..c.name..')'or c.name)or Z.L('Deine Gespräche','Your conversations'))
-    U.channelDetail:SetText(c and caption(Z.Store.Group(c.kind))or Z.L('Wähle ein Gespräch oder starte eine Nachricht.','Choose a conversation or start a message.'))
+    U.channelDetail:SetText(c and detailText(c)or Z.L('Wähle ein Gespräch oder starte eine Nachricht.','Choose a conversation or start a message.'))
+    local state,person=presenceOf(c)
+    U.presenceDot:SetShown(person);if person then paintDot(U.presenceDot,state)end
+    Z.ChatTheme.Place(U.channelDetail,person and 80 or 66,36,(U.contentWidth or 400)-114-(person and 14 or 0),18,U.chatPanel)
     Z.ChatTheme.SetIcon(U.channelIcon,c or{kind='COMMUNITY'})
-    -- The opposite-faction conversation is read-only: a phrase button replaces the input.
-    local readOnly=c~=nil and c.kind=='XFACTION'
-    if c and not readOnly then U.input:Enable()else U.input:Disable()end;U.send:SetEnabled(c~=nil and not readOnly)
-    if readOnly then U.input:ClearFocus()end
-    U.inputBackground:SetShown(not readOnly);U.send:SetShown(not readOnly);U.reply:SetShown(readOnly)
-    U.placeholder:SetShown(not readOnly and U.input:GetText()=='')
+    -- The opposite-faction conversation is read-only: a phrase button replaces the input. An archived guild
+    -- chat or a chat without the right to write shows a quiet note instead; the adapter refuses as well.
+    local phrase=c~=nil and c.kind=='XFACTION'
+    local canWrite=c~=nil and writable(c)
+    if canWrite then U.input:Enable()else U.input:Disable()end;U.send:SetEnabled(canWrite)
+    if not canWrite then U.input:ClearFocus()end
+    local _,_,why=access(c)
+    local note=c~=nil and not phrase and not canWrite and Z.adapter and Z.adapter:ReadOnlyText(why)or nil
+    U.readOnlyNote:SetText(note or'');U.readOnlyNote:SetShown(note~=nil)
+    U.inputBackground:SetShown(not phrase and not note);U.send:SetShown(not phrase and not note);U.reply:SetShown(phrase)
+    U.placeholder:SetShown(not phrase and not note and U.input:GetText()=='')
     if U.LayoutQuick then U.LayoutQuick()end
     Z.Transcript.Render(U)
     U.RefreshRecovery()
@@ -452,8 +574,19 @@ function U.UpdateFade(elapsed)
     U.fadeValue=current;f:SetAlpha(current)
 end
 function U.RefreshRecovery()
-    local c=selected();local recoveries=c and Z.adapter:Recoveries(c.key)or{};U.recoveryAttempt=recoveries[1]
-    U.recovery.label:SetText(U.recoveryAttempt and U.recoveryAttempt.unconfirmed and Z.L('Zustellung unbestätigt · Text anzeigen','Delivery unconfirmed · View text')or Z.L('Fehlgeschlagenen Text wiederherstellen','Restore failed message'))
+    local c=selected();local all=c and Z.adapter:Recoveries(c.key)or{};local recoveries={}
+    for _,r in ipairs(all)do
+        -- A known reason is said once in plain words; a text already back in the input needs no button.
+        if r.code and not r.announced and not U.settingsPanel:IsShown()then r.announced=true;U.Notice(r.error)end
+        -- Restored counts only once the text really stands in the input (not while browsing the sent history).
+        local landed=r.restored and U.loadedKey==c.key and U.input:GetText()==r.text
+        if landed then if r.announced then Z.adapter:DismissRecovery(r.id)end else recoveries[#recoveries+1]=r end
+    end
+    U.recoveryAttempt=recoveries[1]
+    local label=Z.L('Fehlgeschlagenen Text wiederherstellen','Restore failed message')
+    if U.recoveryAttempt and U.recoveryAttempt.unconfirmed then label=Z.L('Zustellung unbestätigt · Text anzeigen','Delivery unconfirmed · View text')
+    elseif U.recoveryAttempt and U.recoveryAttempt.code then label=Z.L('Nicht gesendet · Text wiederherstellen','Not sent · Restore text')end
+    U.recovery.label:SetText(label)
     U.recovery:SetShown(#recoveries>0 and not U.settingsPanel:IsShown())
 end
 function U.Layout()
@@ -462,7 +595,7 @@ function U.Layout()
     local w,h,scale=Z.Layout.Clamp(U.frame:GetWidth(),U.frame:GetHeight(),s.scale,UIParent:GetWidth(),UIParent:GetHeight())
     U.frame:SetScale(scale);U.frame:SetSize(w,h);U.frame:SetResizeBounds(540,360,math.max(540,UIParent:GetWidth()/scale-16),math.max(360,UIParent:GetHeight()/scale-16))
     U.metrics=Z.Layout.Resolve(w,h,s,U.metrics and U.metrics.mode)
-    local sw=U.metrics.sidebarWidth;local content=w-sw-18
+    local sw=U.metrics.sidebarWidth;local content=w-sw-18;U.contentWidth=content
     T.Place(U.titleBar,5,5,w-10,35,U.frame);T.Place(U.brand,8,3,28,28,U.titleBar);T.Place(U.title,46,6,w-235,26,U.titleBar)
     T.Place(U.bookmarks,w-169,7,34,28,U.frame);U.bookmarks:SetShown(Z.Bookmarks~=nil and U.OpenBookmarks~=nil)
     T.Place(U.gear,w-129,7,34,28,U.frame);T.Place(U.lock,w-89,7,34,28,U.frame);T.Place(U.close,w-49,7,34,28,U.frame)
@@ -477,6 +610,7 @@ function U.Layout()
     T.Place(U.chatPanel,sw+7,43,content,h-50,U.frame)
     T.Place(U.channelIcon,14,10,40,40,U.chatPanel);T.Place(U.channelName,66,9,content-114,26,U.chatPanel)
     T.Place(U.channelDetail,66,36,content-114,18,U.chatPanel);T.Place(U.more,content-40,15,30,28,U.chatPanel)
+    T.Place(U.presenceDot,66,40,9,9,U.chatPanel)
     T.Place(U.viewport,10,67,content-29,h-205,U.chatPanel);U.canvas:SetSize(content-29,h-205)
     T.Place(U.empty,24,math.max(12,(h-205)/2-20),content-77,60,U.canvas)
     T.Place(U.scrollbar,content-15,68,8,h-207,U.chatPanel)
@@ -487,7 +621,7 @@ function U.Layout()
     U.send.label:SetText(U.metrics.iconOnly and''or Z.L('Senden','Send'))
     U.send.label:ClearAllPoints();U.send.label:SetPoint('TOPLEFT',U.send,'TOPLEFT',27,-3);U.send.label:SetPoint('BOTTOMRIGHT',U.send,'BOTTOMRIGHT',-5,3)
     U.send.symbol:ClearAllPoints();U.send.symbol:SetPoint(U.metrics.iconOnly and'CENTER'or'LEFT',U.send,U.metrics.iconOnly and'CENTER'or'LEFT',U.metrics.iconOnly and 0 or 8,0)
-    T.Place(U.reply,10,25,content-30,34,U.composer)
+    T.Place(U.reply,10,25,content-30,34,U.composer);T.Place(U.readOnlyNote,10,25,content-30,34,U.composer)
     T.Place(U.inputBackground,10,24,content-sendWidth-38,38,U.composer)
     U.input:SetWidth(content-sendWidth-46);U.input:SetHeight(34)
     T.Place(U.placeholder,12,9,math.max(40,content-sendWidth-70),22,U.inputBackground)
@@ -542,6 +676,7 @@ function U.Build()
     U.listEmpty=T.Text(U.listCanvas,Z.L('Noch keine Gespräche.\n\nStarte über ••• eine Nachricht.','No conversations yet.\n\nStart a message with •••.'),12,false,'muted');U.listEmpty:SetWordWrap(true)
     U.chatPanel=T.Frame(f,'shell','line')
     U.channelIcon=T.Icon(U.chatPanel,{kind='COMMUNITY'});U.channelName=T.Text(U.chatPanel,'',20,true);U.channelDetail=T.Text(U.chatPanel,'',12,false,'muted')
+    U.presenceDot=Z.Kit.Dot(U.chatPanel,'online',9);U.presenceDot:Hide()
     U.more=T.Button(U.chatPanel,'',function(self)
         local c=selected();if c then U.ConversationMenu(self,c)
         else U.StartConversation()end
@@ -563,6 +698,7 @@ function U.Build()
     U.input:SetScript('OnArrowPressed',function(_,key)U.HistoryArrow(key)end)
     U.send=T.Button(U.composer,'',U.Submit,'primary');T.Glyph(U.send,'chevronRight',16);U.send.tip=Z.L('Nachricht senden · Enter','Send message · Enter')
     U.reply=T.Button(U.composer,Z.L('Mit Phrase antworten','Reply with a phrase'),function()if Z.Opposite then Z.Opposite.OpenPhrases()end end,'primary');U.reply:Hide()
+    U.readOnlyNote=T.Text(U.composer,'',12,false,'muted');U.readOnlyNote:SetJustifyH('CENTER');U.readOnlyNote:Hide()
     U.notice=T.Text(U.chatPanel,'',11,false,'goldBright');U.notice:SetWordWrap(true);U.notice:Hide()
     U.recovery=T.Button(U.chatPanel,Z.L('Fehlgeschlagenen Text wiederherstellen','Restore failed message'),function()U.RestoreRecovery(U.recoveryAttempt)end);U.recovery:Hide()
     -- The settings replace the list and the conversation: a title strip with the way back, the view below it (Options.lua).
@@ -578,7 +714,7 @@ function U.Build()
     f:SetScript('OnUpdate',function(_,elapsed)
         U.tick=(U.tick or 0)+elapsed
         U.recoveryTick=(U.recoveryTick or 0)+elapsed
-        if U.recoveryTick>=1 then U.recoveryTick=0;U.RefreshRecovery()end
+        if U.recoveryTick>=1 then U.recoveryTick=0;U.RefreshRecovery();U.RefreshPresence()end
         if U.tick>=1/30 then
             local step=U.tick;U.tick=0
             if U.resizePending then U.resizePending=false;U.Layout();U.SaveGeometry()

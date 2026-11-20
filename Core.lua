@@ -1,6 +1,6 @@
 local addonName,Z=...
 _G.ZenialChat=Z
-Z.VERSION='0.6.0'
+Z.VERSION='0.7.0'
 function Z.L(de,en)return GetLocale and GetLocale()=='deDE'and de or en or de end
 function Z.Safe(...)
     for i=1,select('#',...)do

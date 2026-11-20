@@ -17,6 +17,8 @@ frame:SetScript('OnEvent',function(_,event,...)
     if event=='ADDON_LOADED'then local name=...;if name=='ZenialChat'then Z.Initialize()elseif name=='ZenialCommunity'and Z.CommunityBridge then pcall(Z.CommunityBridge.Connect)end;return end
     if not Z.ready then if event=='PLAYER_LOGIN'then Z.Initialize()else return end end
     if event=='PLAYER_LOGIN'and Z.CommunityBridge then pcall(Z.CommunityBridge.Connect)end
+    -- Status events only feed the online status; they redraw nothing on their own.
+    if Z.Adapter.quiet and Z.Adapter.quiet[event]then Z.adapter:OnEvent(event,...);return end
     local c,row,added
     if Z.Opposite and Z.Opposite.handles[event]then c,row,added=Z.Opposite.OnEvent(event,...);if Z.Calibration then pcall(Z.Calibration.OnEvent,event,...)end else c,row,added=Z.adapter:OnEvent(event,...)end
     if event=='PLAYER_LOGIN'then Z.adapter:RefreshIdentity();Z.UI.CreateMinimapButton();Z.NativeChat.Initialize();if Z.ChatHint then pcall(Z.ChatHint.Initialize)end end

@@ -8,7 +8,7 @@ local SHIFT=40 -- room the button takes from the input
 local offset=0
 local function L(de,en)return Z.L(de,en)end
 local function selected()return Z.store and Z.store:Get(Z.store.db.ui.selected)end
-local function usable(c)return c~=nil and c.kind~='XFACTION'end
+local function usable(c)return c~=nil and c.kind~='XFACTION'and(not Z.adapter or Z.adapter:CanWrite(c))end
 local function items()
     local P=Z.Phrases;local query=U.quickSearch:GetText()
     if query~=''then return P.Templates(query)end

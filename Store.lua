@@ -598,14 +598,15 @@ end
 
 -- messageHits (optional) is a table of conversation keys already known to contain the query, so
 -- that a list refresh never scans all messages again. Without it the messages are scanned here.
-function Store:List(query, messageHits)
+-- filter (optional) leaves out conversations the current view does not show (another guild's archive).
+function Store:List(query, messageHits, filter)
     query = Store.Fold(Store.Plain(query))
     local results = {}
     for _, conversation in pairs(self.conversations) do
-        local matches = query == '' or string.find(Store.Fold(Store.Plain(conversation.name)), query, 1, true)
+        local matches = (not filter or filter(conversation)) and (query == '' or string.find(Store.Fold(Store.Plain(conversation.name)), query, 1, true)
             or string.find(Store.Fold(Store.Plain(conversation.target)), query, 1, true)
-            or string.find(Store.Fold(conversation.alias), query, 1, true)
-        if query ~= '' and not matches then
+            or string.find(Store.Fold(conversation.alias), query, 1, true))
+        if query ~= '' and not matches and (not filter or filter(conversation)) then
             if messageHits then matches = messageHits[conversation.key] ~= nil
             else matches = self:Search(conversation, query) ~= nil end
         end

@@ -15,7 +15,7 @@ local function escape(text)return(tostring(text):gsub('|','||'))end
 -- its result in the same frame as the key press.
 function U.QueryChanged()
     U.listScroll=0
-    U.sidebarSearch=U.query~=''and Z.Search.New(Z.store,U.query)or nil
+    U.sidebarSearch=U.query~=''and Z.Search.New(Z.store,U.query,{filter=U.ListFilter})or nil
     U.sidebarNext=nil;U.sidebarStarted=clock();U.sidebarStale=false
     if U.sidebarSearch then U.sidebarSearch:Step()end
     U.RefreshList()
@@ -46,7 +46,7 @@ local function startPanel(keepScroll)
         U.panelStale=false;if not keepScroll then U.searchListScroll=0 end
         U.RefreshSearchPanel();return
     end
-    U.panelSearch=Z.Search.New(Z.store,text,{key=key,since=sinceFor(U.searchDays or 0)})
+    U.panelSearch=Z.Search.New(Z.store,text,{key=key,since=sinceFor(U.searchDays or 0),filter=U.ListFilter})
     U.panelStale=false;U.searchListScroll=0
     U.panelSearch:Step();U.RefreshSearchPanel()
 end
@@ -227,7 +227,8 @@ function U.OpenBookmark(entry)
     if not entry then return end
     if Z.Bookmarks and Z.Bookmarks.Exists(entry)then
         U.searchInput:ClearFocus();U.searchPanel:Hide()
-        U.Select(entry.key,entry.id)
+        -- An officer chat without the right to read stays closed; the own copy of the bookmark is still shown.
+        if U.Select(entry.key,entry.id)==false then U.ShowCopy(Z.Plain(entry.text))end
     else U.ShowCopy(Z.Plain(entry.text))end
 end
 function U.RemoveBookmark(entry)
@@ -256,7 +257,7 @@ function U.SearchTick()
         U.sidebarNext:Step()
         if U.sidebarNext.done then U.sidebarSearch=U.sidebarNext;U.sidebarNext=nil;U.listDirty=true end
     elseif run and U.sidebarStale and clock()-(U.sidebarStarted or 0)>=RESTART_SECONDS then
-        U.sidebarNext=Z.Search.New(Z.store,U.query);U.sidebarStarted=clock();U.sidebarStale=false
+        U.sidebarNext=Z.Search.New(Z.store,U.query,{filter=U.ListFilter});U.sidebarStarted=clock();U.sidebarStale=false
     end
     if U.listDirty then U.listDirty=false;U.RefreshList()end
     local panelRun=U.panelSearch
