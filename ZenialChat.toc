@@ -6,7 +6,7 @@
 ## Version: 0.6.0
 ## SavedVariables: ZenialChatDB, ZenialMinimapDB
 ## IconTexture: Interface\AddOns\ZenialChat\Media\Icon.tga
-## X-License: MIT
+## X-License: All Rights Reserved
 Theme.lua
 ThemeTokens.lua
 ThemeSkin.lua

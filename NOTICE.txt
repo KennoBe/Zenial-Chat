@@ -19,6 +19,6 @@ The same pages give three single garble pairs (PUBLIC_PAIRS in LanguageWords.lua
 
 The word lists are game data of Blizzard Entertainment.
 
-LanguageWords.lua is licensed under CC BY-SA 4.0 and not under the MIT license
-of the rest of this addon. Redistributions of that file, or of adaptations of
+LanguageWords.lua is licensed under CC BY-SA 4.0 and not under the All Rights Reserved
+license of the rest of this addon. Redistributions of that file, or of adaptations of
 it, must keep this notice and use the same license.
