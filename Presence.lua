@@ -64,7 +64,9 @@ function P:ReadBattleNet()
         if tag and tag~=''and online~=nil then map['b:'..fold(tag)]=online and'online'or'offline'end
         -- A friend playing WoW is also online as that character; the absence of it proves nothing.
         if online and a:Text(game.clientProgram)==wow then
-            local realm=a:Text(game.realmName);local key=a:NameKey(a:FullName(a:Text(game.characterName),realm and(realm:gsub('%s',''))))
+            -- Since Forever 1.60.1 Live-Update 2 reading the realm of a game account can raise an error.
+            local realmRead,realmValue=pcall(function()return game.realmName end)
+            local realm=realmRead and a:Text(realmValue)or nil;local key=a:NameKey(a:FullName(a:Text(game.characterName),realm and(realm:gsub('%s',''))))
             if key then map[key]='online'end
         end
     end
