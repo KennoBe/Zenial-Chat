@@ -71,8 +71,8 @@ function H.OnLink(link)
     local id=type(O.MessageIdForLine)=='function'and safeCall(O.MessageIdForLine,lineID)or nil
     local store,me=Z.store,Z.adapter and Z.adapter.me
     local present=false
-    if id and store and me and me.realm and me.realm~=''and me.faction and me.faction~=''then
-        local key=Z.Store.Key({kind='XFACTION',scope=me.realm,target=me.faction})
+    if id and store and me and me.faction and me.faction~=''then
+        local key=Z.Store.Key({kind='XFACTION',scope=me.realm or'',target=me.faction})
         present=safeCall(store.IndexOf,store,key,id)~=nil
     end
     if not present then

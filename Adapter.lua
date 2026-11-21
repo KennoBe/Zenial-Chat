@@ -63,6 +63,38 @@ local function unusedGuildConversation(c)
  return c and next(c.messages)==nil and c.draft==''and c.unread==0 and c.last==0
   and not(c.pinned or c.muted or c.alias or c.notify or c.keep)and(not c.sent or next(c.sent)==nil)
 end
+-- Since Forever 1.60.1 Live-Update 2 the game reports an empty realm. The last real realm of this character
+-- (by GUID) is kept in the saved variables; without it the realm ZenialCommunity resolved for the same
+-- character (same GUID) is used and kept, then a realm that stored opposite-faction or channel
+-- conversations of this faction all share. Nothing known: empty, never invented.
+function A:KnownRealm(realm,guid,faction)
+ local db=self.store and self.store.db;if type(db)~='table'then return realm or''end
+ if realm and realm~=''then
+  if guid and guid~=''then if type(db.realms)~='table'then db.realms={}end;db.realms[guid]=realm end
+  return realm
+ end
+ local kept=guid and type(db.realms)=='table'and db.realms[guid]
+ if type(kept)=='string'and kept~=''then return kept end
+ local ok,shared=pcall(function()
+  local me=type(_G)=='table'and type(_G.ZenialCommunity)=='table'and _G.ZenialCommunity.me
+  if type(me)=='table'and guid and guid~=''and me.guid==guid and type(me.realm)=='string'and me.realm~=''then return me.realm end
+ end)
+ if ok and self:Text(shared)then
+  if guid and guid~=''then if type(db.realms)~='table'then db.realms={}end;db.realms[guid]=shared end
+  return shared
+ end
+ if not faction or faction==''then return''end
+ local found,count={},0
+ local suffix=':'..faction
+ for _,c in pairs(self.store.conversations or{})do
+  local scope=type(c)=='table'and type(c.scope)=='string'and c.scope or nil
+  local candidate
+  if scope and c.kind=='XFACTION'and c.target==faction then candidate=scope
+  elseif scope and c.kind=='CHANNEL'and#scope>#suffix and scope:sub(-#suffix)==suffix then candidate=scope:sub(1,#scope-#suffix)end
+  if candidate and candidate~=''and candidate~='?'and not found[candidate]then found[candidate]=true;count=count+1;if count>1 then return''end end
+ end
+ return next(found)or''
+end
 function A:RefreshIdentity()
  local p=self.api
  local _,_,_,build=self:Call(p.GetBuildInfo)
@@ -76,7 +108,9 @@ function A:RefreshIdentity()
  end
  realm=self:Text(realm);if not realm or realm==''then realm=self:Text(self:Call(p.GetRealmName))end
  local _,class=self:Call(p.UnitClass,'player')
- self.me={name=self:FullName(name,realm),realm=realm,faction=self:Text(self:Call(p.UnitFactionGroup,'player')),guid=self:Text(self:Call(p.UnitGUID,'player')),classFile=self:Text(class)}
+ local faction,guid=self:Text(self:Call(p.UnitFactionGroup,'player')),self:Text(self:Call(p.UnitGUID,'player'))
+ realm=self:KnownRealm(realm,guid,faction)
+ self.me={name=self:FullName(name,realm),realm=realm,faction=faction,guid=guid,classFile=self:Text(class)}
  self:RefreshGuild(realm)
  local instance=p.LE_PARTY_CATEGORY_INSTANCE or 2
  local inInstance=self:Call(p.IsInGroup,instance)==true
@@ -157,7 +191,7 @@ function A:RefreshGuild(realm)
  self.guildPending=not guild and self:Call(p.IsInGuild)==true or nil
  if self.guildPending then return end
  local club=self:Call(p.C_Club and p.C_Club.GetGuildClubId)
- local fallback=guild and(self:Text(guildRealm)or realm or'?')..':'..guild
+ local fallback=guild and(self:Text(guildRealm)or(realm~=''and realm or nil)or'?')..':'..guild
  local known=type(self.store.db.guildScopes)=='table'and self.store.db.guildScopes
  self.guildScope=nil
  if fallback then
@@ -169,7 +203,7 @@ function A:RefreshGuild(realm)
   else self.guildScope=known and type(known[fallback])=='string'and known[fallback]or fallback end
   local book=guildBook(self);local g=type(book[self.guildScope])=='table'and book[self.guildScope]or{}
   -- A renamed guild keeps its club id: the name changes, the conversations stay.
-  g.name=guild;g.realm=self:Text(guildRealm)or realm;g.fallback=fallback;g.unknown=nil
+  g.name=guild;g.realm=self:Text(guildRealm)or(realm~=''and realm or nil);g.fallback=fallback;g.unknown=nil
   if self:Safe(club)and club then g.club=tostring(club)end
   book[self.guildScope]=g
  end
@@ -301,7 +335,7 @@ function A:GuildList()
  end
  local unknown=0
  for _,entry in ipairs(out)do
-  if entry.name then entry.label=names[entry.name]>1 and entry.realm and entry.name..' ('..entry.realm..')'or entry.name
+  if entry.name then entry.label=names[entry.name]>1 and entry.realm and entry.realm~=''and entry.name..' ('..entry.realm..')'or entry.name
   else unknown=unknown+1;entry.label=L('Unbekannte Gilde','Unknown guild')..(unknown>1 and' '..unknown or'')end
  end
  table.sort(archives,function(a,b)if a.label~=b.label then return a.label<b.label end;return a.scope<b.scope end)

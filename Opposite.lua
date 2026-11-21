@@ -76,8 +76,8 @@ function O.OpenMessage(messageId)
     return(pcall(function()
         ui.Open()
         local store,me=Z.store,Z.adapter and Z.adapter.me
-        if not store or not me or not me.realm or me.realm==''or not me.faction or me.faction==''then return end
-        local key=Z.Store.Key({kind='XFACTION',scope=me.realm,target=me.faction})
+        if not store or not me or not me.faction or me.faction==''then return end
+        local key=Z.Store.Key({kind='XFACTION',scope=me.realm or'',target=me.faction})
         if not store:Get(key)then return end
         ui.Select(key,store:IndexOf(key,messageId)and messageId or nil)
     end))
@@ -93,12 +93,12 @@ local function handle(event,...)
     if not adapter:Safe(line)or type(line)~='number'or line==0 then return end
     local me=adapter.me or{}
     if(guid and guid==me.guid)or sender==me.name then return end
-    if not me.realm or me.realm==''or not me.faction or me.faction==''then return end
+    if not me.faction or me.faction==''then return end
     if type(O.skip)=='function'then
         local ok,skipped=pcall(O.skip,text);if ok and skipped then return end
     end
     if not O.IsOppositeLanguage(language)then return end
-    local c=store:Ensure({kind='XFACTION',name=Z.L('Gegnerische Fraktion','Opposite faction'),scope=me.realm,target=me.faction})
+    local c=store:Ensure({kind='XFACTION',name=Z.L('Gegnerische Fraktion','Opposite faction'),scope=me.realm or'',target=me.faction})
     if not c then return end
     local id='xf:'..tostring(adapter.session or'0')..':'..string.format('%d',line)
     local row={id=id,at=now(),sender=sender,senderGuid=guid and guid:match('^Player%-')and guid or nil,

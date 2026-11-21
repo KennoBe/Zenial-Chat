@@ -50,7 +50,7 @@ local function onMessage(p)
     local adapter,store=Z.adapter,Z.store
     if type(p)~='table'or not adapter or not store then return end
     local me=adapter.me or{}
-    if not me.realm or me.realm==''or not me.faction or me.faction==''then return end
+    if not me.faction or me.faction==''then return end
     if type(p.text)~='string'or p.id==nil then return end
     local outgoing=p.outgoing==true
     if not outgoing then
@@ -58,7 +58,7 @@ local function onMessage(p)
         -- Players of the own faction have nothing to do in the opposite-faction area; an unknown faction is accepted.
         if ok and type(status)=='table'and status.faction==me.faction then return end
     end
-    local c=store:Ensure({kind='XFACTION',name=Z.L('Gegnerische Fraktion','Opposite faction'),scope=me.realm,target=me.faction})
+    local c=store:Ensure({kind='XFACTION',name=Z.L('Gegnerische Fraktion','Opposite faction'),scope=me.realm or'',target=me.faction})
     if not c then return end
     -- Message ids restart every session, so the time keeps entries of earlier sessions apart.
     local id='xfm:'..tostring(p.at)..':'..tostring(p.id)
